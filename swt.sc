@@ -25,6 +25,8 @@ import org.eclipse.swt.graphics._
 import org.eclipse.swt.widgets._
 import org.eclipse.swt.dnd._
 import org.eclipse.swt.events._
+import org.eclipse.swt.layout._
+import org.eclipse.swt.SWT
 import java.lang.reflect.Field
 import java.lang.ClassLoader
 
@@ -34,14 +36,25 @@ if (!(System.getProperty("java.library.path") ==  "/home/dan/9e551bac3626c8d3f5f
   fieldSysPath.setAccessible( true );
   fieldSysPath.set( null, null );
 }
+//can use this in REPL
 val sigar = new org.hyperic.sigar.Sigar
 
 
-/*
 val display = new Display ();
 val shell = new Shell(display)
 shell.setText("Demo")
 
+val resultsComposite = new Composite(shell, SWT.NONE)
+val rl = new RowLayout(SWT.HORIZONTAL)
+resultsComposite.setLayout(rl)
+
+val l = new Label(resultsComposite, SWT.NONE)
+l.setText("address of cromwell: ")
+l.setSize(50, 15)
+
+val t = new Text(resultsComposite, SWT.SINGLE)
+
+shell.setLayout(rl)
 shell.setSize(800, 800)
 shell.open ();
 while (!shell.isDisposed ()) {
@@ -49,4 +62,3 @@ while (!shell.isDisposed ()) {
 }
 
 display.dispose ();
-*/
