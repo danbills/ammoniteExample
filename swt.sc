@@ -29,17 +29,31 @@ import org.eclipse.swt.layout._
 import org.eclipse.swt.SWT
 import java.lang.reflect.Field
 import java.lang.ClassLoader
+import ammonite.ops._
 
-if (!(System.getProperty("java.library.path") ==  "/home/dan/9e551bac3626c8d3f5fd197775409135/lib/")) {
-  System.setProperty("java.library.path", "/home/dan/9e551bac3626c8d3f5fd197775409135/lib/" )
+/*
+Set the lib path setting for sigar native library
+*/
+val pathSetting = "java.library.path"
+val libPath = System.getProperty(pathSetting)
+val setTo = 
+  os match {
+    case Posix => (pwd/'lib).toString
+    case Mac => (pwd/'maclib).toString
+  }
+
+if (libPath !=  setTo) {
+  System.setProperty(pathSetting, setTo )
   val fieldSysPath = classOf[ClassLoader].getDeclaredField( "sys_paths" );
   fieldSysPath.setAccessible( true );
   fieldSysPath.set( null, null );
 }
-//can use this in REPL
+
+//use this in debug REPL
 val sigar = new org.hyperic.sigar.Sigar
 
 
+/*
 val display = new Display ();
 val shell = new Shell(display)
 shell.setText("Demo")
@@ -62,3 +76,4 @@ while (!shell.isDisposed ()) {
 }
 
 display.dispose ();
+*/
