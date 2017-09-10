@@ -1,9 +1,14 @@
 import $ivy.`io.circe::circe-core:0.8.0`
 import $ivy.`io.circe::circe-generic:0.8.0`
 import $ivy.`io.circe::circe-parser:0.8.0`
+import $ivy.`com.chuusai::shapeless:2.3.2`
+
 
 import io.circe.Printer
 import ammonite.ops._
+
+import shapeless._
+import syntax.std.tuple._
 
 //import io.circe.api._
 import io.circe.syntax._
@@ -37,15 +42,20 @@ workflow test {
   call hello
 }
 """
-write(wd/"file1.txt", "I am cow")
+val wdlSourceFileName = ".source"
 
 
-val workflowInputs = Array(
-  "name" -> "world",
+
+val workflowInputsFileName = ".inputs"
+val workflowInputs = Map(
+  "test.hello.name" -> "world",
   "other" -> "other"
 )
 
-val workflowOptions = Array.empty[(String, String)]
+println(Printer.spaces4.pretty(workflowInputs.asJson))
+
+val workflowOptionsFileName = ".options"
+val workflowOptions = Map.empty[String, String]
 
 
 import scalaj.http._
@@ -56,27 +66,16 @@ val CROMWELL_METADATA_PARAMETERS="excludeKey=submittedFiles"
 val CROMWELL_LAST_WORKFLOW_FILE="$HOME/.cromwell.last.workfow.id"
 
 def submit = {
-  //val response=$(curl -s -F wdlSource=@${1} -F workflowInputs=@${2} -F workflowOptions=@${3} ${CROMWELL_URL}/api/workflows/v1)
-  //-s is silent mode
-  //-F is form for posting multipart post dat
-  //$(curl -s -F wdlSource=@${1} -F workflowInputs=@${2} -F workflowOptions=@${3} ${CROMWELL_URL}/api/workflows/v1)
   val json =
      Http(CROMWELL_URL + "/api/workflows/v1")
       .postMulti(
-        Seq(
-          "wdlSource"  -> p.pretty(wdlSource.asJson),
-          "workflowInputs"   -> p.pretty(workflowInputs.asJson),
-          "workflowOptions" -> p.pretty(workflowOptions.asJson)))
+        MultiPart("workflowSource", "nomatter", "", wdlSource),
+        MultiPart("workflowInputs", "nomatter2", "", p.pretty(workflowInputs.asJson)),
+        MultiPart("workflowOptions", "nomatter3", "", p.pretty(Map.empty[String, String].asJson)))
       .asString
       .body
 
   println(json)
-
-  /*
-  echo $response
-  id=$(echo $response | cut -d"," -f1 | cut -d":" -f2 | sed s/\"//g | sed s/\ //g)
-  echo $id > $CROMWELL_LAST_WORKFLOW_FILE
-  */
 }
 
 submit
