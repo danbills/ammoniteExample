@@ -19,6 +19,7 @@ os match {
   case _ => //do nothing
 }
 
+//This ampersand is VERY IMPORTANT to re-process script!
 @
 
 import org.eclipse.swt.graphics._
@@ -29,7 +30,6 @@ import org.eclipse.swt.layout._
 import org.eclipse.swt.SWT
 import java.lang.reflect.Field
 import java.lang.ClassLoader
-import ammonite.ops._
 
 /*
 Set the lib path setting for sigar native library
@@ -53,7 +53,6 @@ if (libPath !=  setTo) {
 val sigar = new org.hyperic.sigar.Sigar
 
 
-/*
 val display = new Display ();
 val shell = new Shell(display)
 shell.setText("Demo")
@@ -76,4 +75,3 @@ while (!shell.isDisposed ()) {
 }
 
 display.dispose ();
-*/
