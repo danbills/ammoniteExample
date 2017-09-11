@@ -10,6 +10,10 @@ import shapeless._
 import syntax.std.tuple._
 
 import io.circe.syntax._
+import io.circe._
+import io.circe.parser._
+import io.circe.generic.auto._
+
 
 import java.nio.file.Files
 
@@ -55,33 +59,40 @@ val CROMWELL_URL="http://localhost:8000"
 val CROMWELL_METADATA_PARAMETERS="excludeKey=submittedFiles"
 val CROMWELL_LAST_WORKFLOW_FILE="$HOME/.cromwell.last.workfow.id"
 
-def submit: Option[String] = {
-  upickle.json.read(
-     Http(CROMWELL_URL + "/api/workflows/v1")
+def submit: String = {
+     Http(CROMWELL_URL + "/api/workflows/v2")
       .postMulti(
         MultiPart("workflowSource", "nomatter", "", wdlSource),
         MultiPart("workflowInputs", "nomatter2", "", p.pretty(workflowInputs.asJson)),
         MultiPart("workflowOptions", "nomatter3", "", p.pretty(Map.empty[String, String].asJson)))
       .asString
-      .body).
-      obj.
-      get("id").
-      map(_.str)
+      .body
 }
 
+case class Submittal(id: String, status: String)
+
+def readSubmittal(in: String) =
+  decode[Submittal](in)
+
 def status(id: String) = {
-     Http(CROMWELL_URL + s"/api/workflows/v1/$id/status").
+     Http(CROMWELL_URL + s"/api/workflows/v2/$id/status").
        asString.
        body
 }
 def metadata(id: String) = {
-  Http(CROMWELL_URL + s"/api/workflows/v1/$id/metadata").
+  Http(CROMWELL_URL + s"/api/workflows/v2/$id/metadata").
+    header("Accept", "application/json").
     asString.
     body
     // curl --compressed -s ${CROMWELL_URL}/api/workflows/v1/${id}/metadata?${CROMWELL_METADATA_PARAMETERS};
 }
-println(submit.map(status))
-println(submit.map(metadata))
+val submittal = readSubmittal(submit)
+println(submittal)
+Thread.sleep(30000)
+val id = submittal.map(_.id).map(metadata)
+
+println(id)
+
 /*
 function timing() {
   if [ -n "$1" ]; then id=$1; else id=$(cat ${CROMWELL_LAST_WORKFLOW_FILE} ); fi
