@@ -3,14 +3,12 @@ import $ivy.`io.circe::circe-generic:0.8.0`
 import $ivy.`io.circe::circe-parser:0.8.0`
 import $ivy.`com.chuusai::shapeless:2.3.2`
 
-
 import io.circe.Printer
 import ammonite.ops._
 
 import shapeless._
 import syntax.std.tuple._
 
-//import io.circe.api._
 import io.circe.syntax._
 
 import java.nio.file.Files
@@ -42,19 +40,11 @@ workflow test {
   call hello
 }
 """
-val wdlSourceFileName = ".source"
-
-
-
-val workflowInputsFileName = ".inputs"
 val workflowInputs = Map(
   "test.hello.name" -> "world",
   "other" -> "other"
 )
 
-println(Printer.spaces4.pretty(workflowInputs.asJson))
-
-val workflowOptionsFileName = ".options"
 val workflowOptions = Map.empty[String, String]
 
 
@@ -65,29 +55,34 @@ val CROMWELL_URL="http://localhost:8000"
 val CROMWELL_METADATA_PARAMETERS="excludeKey=submittedFiles"
 val CROMWELL_LAST_WORKFLOW_FILE="$HOME/.cromwell.last.workfow.id"
 
-def submit = {
-  val json =
+def submit: Option[String] = {
+  upickle.json.read(
      Http(CROMWELL_URL + "/api/workflows/v1")
       .postMulti(
         MultiPart("workflowSource", "nomatter", "", wdlSource),
         MultiPart("workflowInputs", "nomatter2", "", p.pretty(workflowInputs.asJson)),
         MultiPart("workflowOptions", "nomatter3", "", p.pretty(Map.empty[String, String].asJson)))
       .asString
-      .body
-
-  println(json)
+      .body).
+      obj.
+      get("id").
+      map(_.str)
 }
 
-submit
+def status(id: String) = {
+     Http(CROMWELL_URL + s"/api/workflows/v1/$id/status").
+       asString.
+       body
+}
+def metadata(id: String) = {
+  Http(CROMWELL_URL + s"/api/workflows/v1/$id/metadata").
+    asString.
+    body
+    // curl --compressed -s ${CROMWELL_URL}/api/workflows/v1/${id}/metadata?${CROMWELL_METADATA_PARAMETERS};
+}
+println(submit.map(status))
+println(submit.map(metadata))
 /*
-function status() {
-  if [ -n "$1" ]; then id=$1; else id=$(cat ${CROMWELL_LAST_WORKFLOW_FILE} ); fi
-  curl -s ${CROMWELL_URL}/api/workflows/v1/${id}/status;
-}
-function metadata() {
-  if [ -n "$1" ]; then id=$1; else id=$(cat ${CROMWELL_LAST_WORKFLOW_FILE} ); fi
-  curl --compressed -s ${CROMWELL_URL}/api/workflows/v1/${id}/metadata?${CROMWELL_METADATA_PARAMETERS};
-}
 function timing() {
   if [ -n "$1" ]; then id=$1; else id=$(cat ${CROMWELL_LAST_WORKFLOW_FILE} ); fi
   open ${CROMWELL_URL}/api/workflows/v1/${id}/timing;
