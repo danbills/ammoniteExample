@@ -57,9 +57,12 @@ import org.eclipse.swt.widgets.Shell
   */
 
 class Snippet026TreeViewerTabEditing(val shell: Shell) {
+
   val b = new Button(shell, SWT.PUSH)
   b.setText("Remove column")
+
   val v = new TreeViewer(shell, SWT.BORDER | SWT.FULL_SELECTION)
+
   v.getTree.setLinesVisible(true)
   v.getTree.setHeaderVisible(true)
   b.addSelectionListener(new SelectionListener() {
@@ -84,7 +87,9 @@ class Snippet026TreeViewerTabEditing(val shell: Shell) {
       (event.eventType == ColumnViewerEditorActivationEvent.PROGRAMMATIC)
   }
   val feature: Int = ColumnViewerEditor.TABBING_HORIZONTAL | ColumnViewerEditor.TABBING_MOVE_TO_ROW_NEIGHBOR | ColumnViewerEditor.TABBING_VERTICAL | ColumnViewerEditor.KEYBOARD_ACTIVATION
+
   TreeViewerEditor.create(v, focusCellManager, actSupport, feature)
+
   val textCellEditor = new TextCellEditor(v.getTree)
   val columLabels = Array("Column 1", "Column 2", "Column 3")
   val labelPrefix = Array("Column 1 => ", "Column 2 => ", "Column 3 => ")

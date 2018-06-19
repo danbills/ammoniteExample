@@ -44,6 +44,7 @@ workflow test {
   call hello
 }
 """
+
 val workflowInputs = Map(
   "test.hello.name" -> "world",
   "other" -> "other"
@@ -93,21 +94,3 @@ val id = submittal.map(_.id).map(metadata)
 
 println(id)
 
-/*
-function timing() {
-  if [ -n "$1" ]; then id=$1; else id=$(cat ${CROMWELL_LAST_WORKFLOW_FILE} ); fi
-  open ${CROMWELL_URL}/api/workflows/v1/${id}/timing;
-}
-
-if [ "$1" = "submit" ] ; then
-   submit $2 $3 $4
-elif [ "$1" = "status" ] ; then
-   status $2
-elif [ "$1" = "metadata" ] ; then
-   metadata $2
-elif [ "$1" = "timing" ] ; then
-   timing $2
-else
-	instruct exit
-fi
-*/
