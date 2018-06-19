@@ -21,9 +21,6 @@ val p = Printer.noSpaces
 
 /*
 
-   submit [wdl-file] [inputs] [options]"
-   status [worfklow-id]"
-   metadata [worfklow-id]"
    timing [worfklow-id]"
    */
 
@@ -75,22 +72,40 @@ case class Submittal(id: String, status: String)
 def readSubmittal(in: String) =
   decode[Submittal](in)
 
-def status(id: String) = {
+def status(id: String) =
      Http(CROMWELL_URL + s"/api/workflows/v2/$id/status").
        asString.
        body
-}
+
 def metadata(id: String) = {
   Http(CROMWELL_URL + s"/api/workflows/v2/$id/metadata").
     header("Accept", "application/json").
     asString.
     body
-    // curl --compressed -s ${CROMWELL_URL}/api/workflows/v1/${id}/metadata?${CROMWELL_METADATA_PARAMETERS};
 }
+
+def timing(id: String) = {
+  val exec = s"open $CROMWELL_URL/api/workflows/v2/$id/timing"
+  //%(exec)
+  //%%(exec)
+  //Http().
+    //asString.
+    //body
+}
+
+/** Submit */
 val submittal = readSubmittal(submit)
 println(submittal)
-Thread.sleep(30000)
-val id = submittal.map(_.id).map(metadata)
+Thread.sleep(5000)
 
-println(id)
+/** Metadata */
+//val data = submittal.map(_.id).map(metadata)
+
+/** Status */
+val data = submittal.map(_.id).map(status)
+
+/** Timing */
+//val data = submittal.map(_.id).map(timing)
+
+println(data)
 

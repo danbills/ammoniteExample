@@ -39,7 +39,7 @@ Set the lib path setting for sigar native library
 */
 val pathSetting = "java.library.path"
 val libPath = System.getProperty(pathSetting)
-val setTo = 
+val setTo =
   os match {
     case Posix => (pwd/'lib).toString
     case Mac => (pwd/'maclib).toString
