@@ -58,32 +58,6 @@ import _root_.scodec.codecs.implicits._
 import _root_.scodec.stream.{decode => D, StreamDecoder}
 import _root_.scodec.bits.ByteVector
 
-case class ServerConfig(port: UserPortNumber)
-
-//This automatically derives a codec for ServerArgument via shapeless' Generic
-implicit val c = Codec[Argument]
-
-type Argument = ServerConfig :: HNil
-type Output = HNil
-type State =
-  Map[ByteVector, ByteVector] :: // request cache
-  HNil
-
-
-type MonadStack[A] = StateT[IO, State, A]
-
-object ArgPoly extends Poly1 {
-  import Case._
-  implicit def sc: Case.Aux[ServerConfig, Stream[MonadStack, Output]] = at[ServerConfig] {
-    _ => Stream.eval(HNil)
-  }
-}
-
-val pipe: fs2.Pipe[MonadStack, Argument, Output] =
-    _.flatMap{_.map(ArgPoly)}
-
-implicit val configCodec = Codec[Argument]
-
 //we expect the size of the arg to be < 65 KiB, so we
 val sizeCodec = C.uint32
 
@@ -97,48 +71,37 @@ implicit val tcpACG: AsynchronousChannelGroup = AsynchronousChannelProvider
 implicit val executionContext: ExecutionContext = ExecutionContext.Implicits.global
 
 // Connect once, send a serverConfig
-@main
-def server(args: String*) {
-  args.toList match {
-    case List(argPort) =>
-        refineV[Interval.Closed[W.`1024`.T, W.`49151`.T]](argPort.toInt).foreach{ port =>
-
-          val s: Stream[IO, Argument] = tcpServer[IO](new InetSocketAddress(InetAddress.getByName(null), port.value)).flatMap {
-            connection: Stream[IO, Socket[IO]] =>
-              connection.flatMap {
-                socket: Socket[IO] =>
-
+def server[A](port: String)(implicit c: Codec[A]): Stream[IO, A] = {
+  refineV[Interval.Closed[W.`1024`.T, W.`49151`.T]](port.toInt) match {
+    case Right(port) =>
+      tcpServer[IO](new InetSocketAddress(InetAddress.getByName(null), port.value)).flatMap {
+        connection: Stream[IO, Socket[IO]] =>
+          connection.flatMap {
+            socket: Socket[IO] =>
+              Stream.
+                eval(socket.readN(4).map(_.get)).
+                map(_.toVector).
+                map(BitVector.apply).
+                map(sizeCodec.decode).
+                map(_.fold({err => throw new RuntimeException(err.messageWithContext)}, {dr => dr.value})).
+                flatMap{numBytes =>
                   Stream.
-                    eval(socket.readN(4).map(_.get)).
+                    eval(socket.readN(numBytes.toInt).map(_.get))}.
                     map(_.toVector).
-                    map(BitVector.apply).
-                    map(sizeCodec.decode).
-                    map(_.fold({err => throw new RuntimeException(err.messageWithContext)}, {dr => dr.value})).
-                    flatMap{numBytes =>
-                      Stream.
-                        eval(socket.readN(numBytes.toInt).map(_.get))}.
-                        map(_.toVector).
-                        map(BitVector.apply).map(c.decodeValue).flatMap {
-                          _.fold({err => Stream.eval(IO.raiseError(throw new RuntimeException(err.messageWithContext)))}, {
-                            serverConfig =>
-                              println(s"thing was $serverConfig")
-                              Stream.emit(serverConfig).observe1(_ => socket.close)
-                          })
-                        }
-              }
+                    map(BitVector.apply).map(c.decodeValue).flatMap {
+                      _.fold({err => Stream.raiseError(throw new RuntimeException(err.messageWithContext))}, {
+                        serverConfig =>
+                          Stream.emit(serverConfig)
+                      })
+                    }
           }
-
-          s.take(1).compile.last.flatMap(sc => IO{ println(s"server config was $sc")}).unsafeRunSync()
-        }
-    case _ => println("usage: amm cromwell_server.sc server [port between 1024 and 49151]")
+      }
+    case Left(bad) => Stream.raiseError(new RuntimeException(bad.toString))
   }
 }
 
-
-
 // Connect once, send a serverConfig
-@main
-def client(args: String*): Unit = {
+def client[A](a: A,args: String*)(implicit configCodec: Codec[A]): Unit = {
   args.toList match {
     case List(argPort, connectionPort) =>
       refineV[Interval.Closed[W.`1024`.T, W.`49151`.T]](argPort.toInt).
@@ -146,23 +109,24 @@ def client(args: String*): Unit = {
           val connection = tcpClient[IO](new InetSocketAddress(InetAddress.getByName(null), connectionPort.toInt))
           val x: Stream[IO, Unit] = connection.flatMap{
             connection =>
-              val writer = c.encode(ServerConfig(port) :: HNil) match {
-                case Successful(objBytes: BitVector) =>
-
-                  sizeCodec.encode(objBytes.size.toInt) match {
-                    case Successful(sizeBytes) =>
-
-                      //write the size of the message, write the message, read the message,
-                      Stream.eval(connection.write(Chunk.array(sizeBytes.toByteArray))) ++
-                        Stream.eval(connection.write(Chunk.array(objBytes.toByteArray))) ++
-                        Stream.eval(connection.close)
-                  }
-                case x => Stream.eval{IO{println(s"something happened $x")}} ++ Stream.eval(connection.close)
-              }
-              writer
+              val writer = sendConfig(a)
+              writer.flatMap(bv => Stream.eval(connection.write(Chunk.array(bv.toByteArray))) ++ Stream.eval(connection.close))
           }
           x.compile.drain.unsafeRunSync()
         }
     case _ => println("usage: amm cromwell_server.sc server [portToBeBound] [portOfServerThatWillDoTheBinding]")
+  }
+}
+
+//Protocol is 4 bytes
+def sendConfig[A](a: A)(implicit configCodec: Codec[A]): Stream[Pure, BitVector] = {
+  val sizeCodec = C.uint32
+  configCodec.encode(a) match {
+    case Successful(objBytes: BitVector) =>
+      sizeCodec.encode(objBytes.size.toInt) match {
+        case Successful(sizeBytes) =>
+          Stream.emit(sizeBytes ++ objBytes)
+      }
+    case x => Stream.raiseError(new RuntimeException(s"something happened $x"))
   }
 }
