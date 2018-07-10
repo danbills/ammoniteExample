@@ -2,6 +2,7 @@ import $ivy.`org.tpolecat::doobie-core:0.5.3`
 import $ivy.`org.tpolecat::doobie-hikari:0.5.3`
 import $ivy.`com.google.cloud:google-cloud-datastore:1.31.0`
 import $ivy.`mysql:mysql-connector-java:8.0.11`
+
 import $file.simple_rpc_server
 import simple_rpc_server._
 import doobie._
@@ -21,7 +22,7 @@ import com.google.cloud.datastore._
 
 
 
-def find(offset: Int) =
+def find(offset: Int): doobie.Query0[(Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])] =
   sql"select * from METADATA_ENTRY order by METADATA_JOURNAL_ID limit 500 offset $offset".
       query[(Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])]
 
@@ -44,18 +45,10 @@ def server(args: String*) = {
   val tcpServer: fs2.Stream[IO, DoobieConfig] = simple_rpc_server.server[DoobieConfig](args.head)
 
   tcpServer.
-    take(1).
-    compile.
-    last.
-    map(_.get).
     flatMap{
       case DoobieConfig(driver, connectionString, user, pass) =>
         val xa = Transactor.fromDriverManager[IO](driver, connectionString, user, pass)
-        find(0).
-          stream.
-          //take(1).
-          compile.toList.
-          transact(xa)
+        val stream: fs2.Stream[doobie.ConnectionIO, (Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])] = find(0).stream
     }.map{
       list => list map {
       case tuple@(autoId, wfId, metadataKey, optCallFQN, optJobScatterIndex, optJobRetryAttempt, optMetadataValue, timestamp, optValueType) =>
