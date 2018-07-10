@@ -27,11 +27,32 @@ import scodec._
 import scodec.codecs._
 import _root_.scodec.codecs.implicits._
 import fs2.Pure
+import fs2.Stream
+import cats.effect.Effect
 
 
-import com.google.cloud.datastore._
+import com.google.cloud.datastore.{Query => DSQuery, _}
+import DSQuery._
+import com.google.cloud.datastore.StructuredQuery.OrderBy;
+import collection.JavaConverters._
 
 
+def latestFromDatatstore[F[_]](implicit e: Effect[F]): Stream[F, Long] = {
+  Stream.eval{
+    e.delay{
+      val datastore = DatastoreOptions.getDefaultInstance().getService();
+      val query = DSQuery.newEntityQueryBuilder()
+    .setKind("metadata")
+    .setOrderBy(OrderBy.desc("autoId"))
+    .build();
+      val tasks: QueryResults[Entity] = datastore.run(query, Nil : _*);
+
+
+        tasks.asScala.toList.head.getLong("autoId")
+
+    }
+  }
+}
 
 def find(offset: Int): doobie.Query0[(Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])] =
   sql"select * from METADATA_ENTRY order by METADATA_JOURNAL_ID limit 500 offset $offset".
@@ -46,12 +67,12 @@ val counter: fs2.Stream[Pure, Int] = fs2.Stream.unfold(0){s =>
   Some((n,n))
 }
 
+type MetadataColumns = (Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])
+
 @main
 def server(args: String*) = {
 
   val datastore = DatastoreOptions.getDefaultInstance().getService();
-
-
 
   val tcpServer: fs2.Stream[IO, DoobieConfig] = simple_rpc_server.server[DoobieConfig](args.head)
 
@@ -59,9 +80,10 @@ def server(args: String*) = {
     flatMap{
       case DoobieConfig(driver, connectionString, user, pass) =>
         val xa = Transactor.fromDriverManager[IO](driver, connectionString, user, pass)
-        val stream: fs2.Stream[doobie.ConnectionIO, (Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])] = find(0).stream
+        find(0).stream
+
+        null.asInstanceOf[Stream[IO, MetadataColumns]]
     }.map{
-      list => list map {
       case tuple@(autoId, wfId, metadataKey, optCallFQN, optJobScatterIndex, optJobRetryAttempt, optMetadataValue, timestamp, optValueType) =>
         val key = tuple.hashCode.toString
         val taskKey = datastore.newKeyFactory().setKind("metadata").newKey(key)
@@ -81,11 +103,12 @@ def server(args: String*) = {
         optValueType.foreach(builder.set("valueType", _))
 
         builder.build()
-    }}
+    }
+    .chunkLimit(500)
     .flatMap{
       entities =>
-        IO {datastore.put(entities:_*) }
-    }.unsafeRunSync()
+        Stream.eval(IO {datastore.put(entities.toList:_*) })
+    }.compile.drain.unsafeRunSync()
 }
 
 @main def client(args: String*) = simple_rpc_server.client(DoobieConfig("com.mysql.cj.jdbc.Driver","jdbc:mysql://localhost/DatabaseName?useSSL=false","ChooseAName","YourOtherPassword"), args:_*)
