@@ -1,3 +1,14 @@
+/*
+
+Migration of (Meta)Data from Cromwell's SQL datastore to Google Datastore
+
+Algorithm:
+lastRowPulled <- query datastore by auto Id desc to get last row pushed to the Datastore
+newData <- query Cromwell metadata
+entities <- convert data into Datastore objects known as "Entities"
+push the entites into Datastore
+
+*/
 import $ivy.`org.tpolecat::doobie-core:0.5.3`
 import $ivy.`org.tpolecat::doobie-hikari:0.5.3`
 import $ivy.`com.google.cloud:google-cloud-datastore:1.31.0`
