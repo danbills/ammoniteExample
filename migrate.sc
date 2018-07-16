@@ -1,3 +1,11 @@
+interp.configureCompiler(_.settings.YpartialUnification.value = true)
+interp.repositories() ++= Seq(coursier.maven.MavenRepository(
+  "https://oss.sonatype.org/content/repositories/releases"))
+
+@
+
+import $plugin.$ivy.`org.spire-math::kind-projector:0.9.7`
+
 /*
 
 Migration of (Meta)Data from Cromwell's SQL datastore to Google Datastore
@@ -11,7 +19,7 @@ push the entites into Datastore
 */
 import $ivy.`org.tpolecat::doobie-core:0.5.3`
 import $ivy.`org.tpolecat::doobie-hikari:0.5.3`
-import $ivy.`com.google.cloud:google-cloud-datastore:1.31.0`
+import $ivy.`com.google.cloud:google-cloud-datastore:1.35.0`
 import $ivy.`mysql:mysql-connector-java:8.0.11`
 
 import $file.simple_rpc_server
@@ -26,33 +34,50 @@ import java.math.BigInteger
 import scodec._
 import scodec.codecs._
 import _root_.scodec.codecs.implicits._
-import fs2.Pure
-import fs2.Stream
+import fs2.{Pure, Stream, Sink, Pipe}
+import fs2.Stream._
 import cats.effect.Effect
+import cats.instances.long._
 
 
 import com.google.cloud.datastore.{Query => DSQuery, _}
 import DSQuery._
 import com.google.cloud.datastore.StructuredQuery.OrderBy;
 import collection.JavaConverters._
+import com.google.cloud.datastore.ReadOption
+import cats.Monad
+import cats.syntax.monad._
+import cats.syntax.traverse._
+import cats.instances.list._
 
+def datastore[F[_]: Effect]: Stream[F, Datastore] =
+  Stream emit DatastoreOptions.getDefaultInstance().getService()
 
-def latestFromDatatstore[F[_]](implicit e: Effect[F]): Stream[F, Long] = {
-  Stream.eval{
-    e.delay{
-      val datastore = DatastoreOptions.getDefaultInstance().getService();
+def queryLatest[F[_]](implicit eff : Effect[F], m: Monad[Stream[F, ?]]): Pipe[F, Datastore, List[Entity]] =
+  _.flatMap{
+    datastore =>
       val query = DSQuery.newEntityQueryBuilder()
-    .setKind("metadata")
-    .setOrderBy(OrderBy.desc("autoId"))
-    .build();
-      val tasks: QueryResults[Entity] = datastore.run(query, Nil : _*);
-
-
-        tasks.asScala.toList.head.getLong("autoId")
-
-    }
+        .setKind("metadata")
+        .setOrderBy(OrderBy.desc("autoId"))
+        .setLimit(1)
+        .build();
+      Stream.eval(eff.delay {datastore.run(query, Seq.empty[ReadOption]:_*).asScala.toList})
   }
-}
+
+def emitList[F[_]: Effect, A]: Pipe[F, Seq[A], A] = _.flatMap(Stream.emits(_))
+
+/*
+def scanSegmentsOpt[S, O2](init: S)(f: (S) ⇒ Option[(Segment[O, Unit]) ⇒ Segment[O2, S]]): Pull[F, O2, S]
+More general version of scanSegments where the current state (i.e., S) can be inspected to determine if another segment should be pulled or if the pull should terminate.
+
+*/
+
+
+def fullLatestFromDatastore: Stream[IO, Long] =
+ datastore[IO].through(queryLatest).through(emitList).map(_.getLong("autoId"))
+
+//datastore[IO].through(queryLatest).through(emitList).map(_.getLong("autoId")).to(Sink.showLinesStdOut[IO, Long]).compile.drain.unsafeRunSync
+
 
 def find(offset: Int): doobie.Query0[(Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])] =
   sql"select * from METADATA_ENTRY order by METADATA_JOURNAL_ID limit 500 offset $offset".
@@ -62,8 +87,7 @@ case class DoobieConfig(driver: String, connectionString: String, user: String, 
 
 implicit val c = Codec[DoobieConfig]
 
-val counter: fs2.Stream[Pure, Int] = fs2.Stream.unfold(0){s =>
-  val n = s + 500
+val counter: fs2.Stream[Pure, Int] = fs2.Stream.unfold(0){s => val n = s + 500
   Some((n,n))
 }
 
@@ -75,6 +99,13 @@ def server(args: String*) = {
   val datastore = DatastoreOptions.getDefaultInstance().getService();
 
   val tcpServer: fs2.Stream[IO, DoobieConfig] = simple_rpc_server.server[DoobieConfig](args.head)
+
+fullLatestFromDatastore.pull.uncons.flatMap{
+  case Some((hd, tl)) =>
+  case None => Pull.done
+}
+
+  tcpServer merge fullLatestFromDatastore
 
   tcpServer.
     flatMap{
@@ -115,3 +146,4 @@ def server(args: String*) = {
 
 //Things to do w/ server
 //.observe1(_ => socket.close)
+
