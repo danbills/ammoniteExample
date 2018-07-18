@@ -5,28 +5,41 @@ interp.repositories() ++= Seq(coursier.maven.MavenRepository(
 @
 
 import $plugin.$ivy.`org.spire-math::kind-projector:0.9.7`
+import scala.concurrent.duration._
 
 /*
 
 Migration of (Meta)Data from Cromwell's SQL datastore to Google Datastore
 
+
 Algorithm:
+
+every N seconds,
 lastRowPulled <- query datastore by auto Id desc to get last row pushed to the Datastore
-newData <- query Cromwell metadata
+newData <- query Cromwell metadata from lastRow until end of all metadata
 entities <- convert data into Datastore objects known as "Entities"
 push the entites into Datastore
+
+possible optimizations to be made:
+Only pull data from datastore if we see there is no more data to be pulled from MySQL
+pull data from mysql and load to DS in separate threads
+
 
 */
 import $ivy.`org.tpolecat::doobie-core:0.5.3`
 import $ivy.`org.tpolecat::doobie-hikari:0.5.3`
 import $ivy.`com.google.cloud:google-cloud-datastore:1.35.0`
 import $ivy.`mysql:mysql-connector-java:8.0.11`
+import $ivy.`com.chuusai::shapeless:2.3.3`
+
+import shapeless.syntax.std.tuple._
 
 import $file.simple_rpc_server
 import simple_rpc_server._
 import doobie._
 import doobie.implicits._
 import cats.effect.IO
+import java.util.concurrent.Executors
 import java.time.Instant
 import scala.{Stream => _}
 import java.math.BigInteger
@@ -34,7 +47,7 @@ import java.math.BigInteger
 import scodec._
 import scodec.codecs._
 import _root_.scodec.codecs.implicits._
-import fs2.{Pure, Stream, Sink, Pipe}
+import fs2.{Pure, Stream, Sink, Pipe, Scheduler}
 import fs2.Stream._
 import cats.effect.Effect
 import cats.instances.long._
@@ -67,8 +80,10 @@ def queryLatest[F[_]](implicit eff : Effect[F], m: Monad[Stream[F, ?]]): Pipe[F,
 def emitList[F[_]: Effect, A]: Pipe[F, Seq[A], A] = _.flatMap(Stream.emits(_))
 
 /*
-def scanSegmentsOpt[S, O2](init: S)(f: (S) ⇒ Option[(Segment[O, Unit]) ⇒ Segment[O2, S]]): Pull[F, O2, S]
-More general version of scanSegments where the current state (i.e., S) can be inspected to determine if another segment should be pulled or if the pull should terminate.
+def scanSegments[S, O2](init: S)(f: (S, Segment[O, Unit]) ⇒ Segment[O2, S]): Pull[F, O2, S]
+Like scan but f is applied to each segment of the source stream.
+
+
 
 */
 
@@ -76,7 +91,9 @@ More general version of scanSegments where the current state (i.e., S) can be in
 def fullLatestFromDatastore: Stream[IO, Long] =
  datastore[IO].through(queryLatest).through(emitList).map(_.getLong("autoId"))
 
-//datastore[IO].through(queryLatest).through(emitList).map(_.getLong("autoId")).to(Sink.showLinesStdOut[IO, Long]).compile.drain.unsafeRunSync
+val timer = Scheduler.fromScheduledExecutorService(Executors.newScheduledThreadPool(1)).awakeEvery[IO](5.seconds)
+
+fullLatestFromDatastore.zipWith(timer){ case (ds, _) => ds }
 
 
 def find(offset: Int): doobie.Query0[(Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])] =
@@ -100,10 +117,13 @@ def server(args: String*) = {
 
   val tcpServer: fs2.Stream[IO, DoobieConfig] = simple_rpc_server.server[DoobieConfig](args.head)
 
+  /*
 fullLatestFromDatastore.pull.uncons.flatMap{
-  case Some((hd, tl)) =>
+  case Some((head, tail)) =>
+    //head is a seqment
   case None => Pull.done
 }
+*/
 
   tcpServer merge fullLatestFromDatastore
 
