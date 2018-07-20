@@ -25,6 +25,8 @@ implicit val tcpACG: AsynchronousChannelGroup = AsynchronousChannelProvider
   .provider()
   //I have no idea what I'm doing here
   .openAsynchronousChannelGroup(Executors.newCachedThreadPool(), 8)
+val ctx = SSLContext.getInstance("TLS")
+ctx.init(null, null, null)
 
 val engine = sslCtx.createSSLEngine()
 engine.setUseClientMode(true)
@@ -37,4 +39,3 @@ client(address) flatMap { socket => Stream.eval(TLSSocket(socket, engine, execut
 
   ???
 }
-
