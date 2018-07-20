@@ -32,7 +32,7 @@ import cats.effect.Effect
 
 
 import com.google.cloud.datastore.{Query => DSQuery, _}
-import DSQuery._
+//import com.google.cloud.datastore.Query._
 import com.google.cloud.datastore.StructuredQuery.OrderBy;
 import collection.JavaConverters._
 
