@@ -23,6 +23,7 @@ push the entites into Datastore
 possible optimizations to be made:
 Only pull data from datastore if we see there is no more data to be pulled from MySQL
 pull data from mysql and load to DS in separate threads
+retry on
 
 
 */
@@ -79,14 +80,6 @@ def queryLatest[F[_]](implicit eff : Effect[F], m: Monad[Stream[F, ?]]): Pipe[F,
 
 def emitList[F[_]: Effect, A]: Pipe[F, Seq[A], A] = _.flatMap(Stream.emits(_))
 
-/*
-def scanSegments[S, O2](init: S)(f: (S, Segment[O, Unit]) ⇒ Segment[O2, S]): Pull[F, O2, S]
-Like scan but f is applied to each segment of the source stream.
-
-
-
-*/
-
 
 def fullLatestFromDatastore: Stream[IO, Long] =
  datastore[IO].through(queryLatest).through(emitList).map(_.getLong("autoId"))
@@ -95,8 +88,9 @@ val timer = Scheduler.fromScheduledExecutorService(Executors.newScheduledThreadP
 
 fullLatestFromDatastore.zipWith(timer){ case (ds, _) => ds }
 
+type MetadataColumns = (Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])
 
-def find(offset: Int): doobie.Query0[(Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])] =
+def find(offset: Int): doobie.Query0[MetadataColumns] =
   sql"select * from METADATA_ENTRY order by METADATA_JOURNAL_ID limit 500 offset $offset".
       query[(Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])]
 
@@ -107,8 +101,6 @@ implicit val c = Codec[DoobieConfig]
 val counter: fs2.Stream[Pure, Int] = fs2.Stream.unfold(0){s => val n = s + 500
   Some((n,n))
 }
-
-type MetadataColumns = (Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])
 
 @main
 def server(args: String*) = {
@@ -131,9 +123,8 @@ fullLatestFromDatastore.pull.uncons.flatMap{
     flatMap{
       case DoobieConfig(driver, connectionString, user, pass) =>
         val xa = Transactor.fromDriverManager[IO](driver, connectionString, user, pass)
-        find(0).stream
-
-        null.asInstanceOf[Stream[IO, MetadataColumns]]
+        val finder = find(0).stream
+        xa.transP.apply(finder)
     }.map{
       case tuple@(autoId, wfId, metadataKey, optCallFQN, optJobScatterIndex, optJobRetryAttempt, optMetadataValue, timestamp, optValueType) =>
         val key = tuple.hashCode.toString
@@ -163,7 +154,3 @@ fullLatestFromDatastore.pull.uncons.flatMap{
 }
 
 @main def client(args: String*) = simple_rpc_server.client(DoobieConfig("com.mysql.cj.jdbc.Driver","jdbc:mysql://localhost/DatabaseName?useSSL=false","ChooseAName","YourOtherPassword"), args:_*)
-
-//Things to do w/ server
-//.observe1(_ => socket.close)
-
