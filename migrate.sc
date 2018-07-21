@@ -158,26 +158,10 @@ fullLatestFromDatastore.pull.uncons.flatMap{
   def scanState[F[_], S, A, B](init: S)(f: A => State[S, B]): Pipe[F, A, B] =
       _.pull.scanSegments(init){
         case (previousState, segment: Segment[A, Unit]) =>
-          val newState: State[S, Vector[B]] = segment.force.toVector.traverse(f)
-          val (s, b) = (newState run previousState).value
-
-          val newSegment = Segment.vector(b)
-          newSegment.asResult(s)
-      }.stream
-
-  def scanStateNoForce[F[_], S, A, B](init: S)(f: A => State[S, B]): Pipe[F, A, B] = {
-    def go(s: Stream[F, A], state: S): Pull[F, B, S] = {
-      s.pull.uncons.flatMap {
-        case Some((hd,tl)) =>
-          val newSegment = hd.mapAccumulate(state)({
+          segment.mapAccumulate(previousState)({
             case (state, o1) =>
               val stateFunc = f(o1)
               (stateFunc run state).value
           }).mapResult(_._2)
+      }.stream
 
-          Pull.segment(newSegment)
-        case None => Pull.done
-      }
-    }
-    in => go(in, init).stream
-  }
