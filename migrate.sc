@@ -23,10 +23,8 @@ push the entites into Datastore
 possible optimizations to be made:
 Only pull data from datastore if we see there is no more data to be pulled from MySQL
 pull data from mysql and load to DS in separate threads
-retry on
-
-
 */
+
 import $ivy.`org.tpolecat::doobie-core:0.5.3`
 import $ivy.`org.tpolecat::doobie-hikari:0.5.3`
 import $ivy.`com.google.cloud:google-cloud-datastore:1.35.0`
@@ -48,10 +46,12 @@ import java.math.BigInteger
 import scodec._
 import scodec.codecs._
 import _root_.scodec.codecs.implicits._
-import fs2.{Pure, Stream, Sink, Pipe, Scheduler}
+import fs2.{Pure, Stream, Sink, Pipe, Scheduler, Segment, Pull}
 import fs2.Stream._
 import cats.effect.Effect
 import cats.instances.long._
+import cats.instances.vector._
+import cats.data.State
 
 
 import com.google.cloud.datastore.{Query => DSQuery, _}
@@ -154,3 +154,30 @@ fullLatestFromDatastore.pull.uncons.flatMap{
 }
 
 @main def client(args: String*) = simple_rpc_server.client(DoobieConfig("com.mysql.cj.jdbc.Driver","jdbc:mysql://localhost/DatabaseName?useSSL=false","ChooseAName","YourOtherPassword"), args:_*)
+
+  def scanState[F[_], S, A, B](init: S)(f: A => State[S, B]): Pipe[F, A, B] =
+      _.pull.scanSegments(init){
+        case (previousState, segment: Segment[A, Unit]) =>
+          val newState: State[S, Vector[B]] = segment.force.toVector.traverse(f)
+          val (s, b) = (newState run previousState).value
+
+          val newSegment = Segment.vector(b)
+          newSegment.asResult(s)
+      }.stream
+
+  def scanStateNoForce[F[_], S, A, B](init: S)(f: A => State[S, B]): Pipe[F, A, B] = {
+    def go(s: Stream[F, A], state: S): Pull[F, B, S] = {
+      s.pull.uncons.flatMap {
+        case Some((hd,tl)) =>
+          val newSegment = hd.mapAccumulate(state)({
+            case (state, o1) =>
+              val stateFunc = f(o1)
+              (stateFunc run state).value
+          }).mapResult(_._2)
+
+          Pull.segment(newSegment)
+        case None => Pull.done
+      }
+    }
+    in => go(in, init).stream
+  }
