@@ -1,0 +1,22 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: varnish-cache
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: varnish-cache
+    spec:
+      containers:
+      - name: cache
+        resources:
+          requests:
+            # We'll use two gigabytes for each varnish cache
+            memory: 2Gi
+        image: danbills/varnish:6_1
+        imagePullPolicy: Always
+        args: ["-F", "-b", "cromwell-service.default:8000", "-a" , "0.0.0.0:8080" , "-s" , "malloc,2G"]
+        ports:
+        - containerPort: 8080

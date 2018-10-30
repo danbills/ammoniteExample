@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cromwell-pod
+  labels:
+      app: cromwell
+spec:
+  containers:
+    - name: cromwell-container
+      args: ["server"]
+      image: broadinstitute/cromwell:36
+      env:
+          - name: JAVA_OPTS
+            #value: "-Dconfig.file=/conf/cromwell.conf -DLOG_LEVEL=DEBUG"
+            value: "-Dconfig.file=/conf/cromwell.conf"
+      volumeMounts:
+        - name: config-volume
+          mountPath: /conf
+          # command: ["java", "-jar", "-Dconfig.file=X", "server"]
+  volumes:
+    - name: config-volume
+      configMap:
+        # Provide the name of the ConfigMap containing the files you want
+        # to add to the container
+        name: papi
