@@ -12,6 +12,8 @@ spec:
       env:
           - name: JAVA_OPTS
             value: "-Dconfig.file=/conf/cromwell-rw-worker.conf"
+          - name: GOOGLE_APPLICATION_CREDENTIALS
+            value: "/conf/cromwell-sa.json"
       volumeMounts:
         - name: config-volume
           mountPath: /conf
