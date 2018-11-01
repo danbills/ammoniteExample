@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cromwell-service
+spec:
+  ports:
+  - port: 8000
+  selector:
+    app: cromwell
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cromwell
+spec:
+  selector:
+    matchLabels:
+      app: cromwell
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: cromwell
+    spec:
+      containers:
+      - image: broadinstitute/cromwell
+        name: cromwell
+        env:
+          # Use secret in real usage
+        - name: MYSQL_ROOT_PASSWORD
+          value: password
+        ports:
+        - containerPort: 8000
+          name: cromwell

@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cromwell-worker-pod
+  labels:
+      app: cromwell-worker
+spec:
+  containers:
+    - name: cromwell-worker-container
+      args: ["server"]
+      image: broadinstitute/cromwell:36
+      env:
+          - name: JAVA_OPTS
+            value: "-Dconfig.file=/conf/cromwell-rw-worker.conf"
+          - name: GOOGLE_APPLICATION_CREDENTIALS
+            value: "/conf/cromwell-sa.json"
+      volumeMounts:
+        - name: config-volume
+          mountPath: /conf
+  volumes:
+    - name: config-volume
+      configMap:
+        # Provide the name of the ConfigMap containing the files you want
+        # to add to the container
+        name: rw
