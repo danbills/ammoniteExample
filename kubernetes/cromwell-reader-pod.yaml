@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cromwell-reader-pod
+  labels:
+      app: cromwell-reader
+spec:
+  containers:
+    - name: cromwell-reader-container
+      args: ["server"]
+      image: broadinstitute/cromwell:36
+      env:
+          - name: JAVA_OPTS
+            value: "-Dconfig.file=/conf/cromwell-rw-reader.conf"
+      volumeMounts:
+        - name: config-volume
+          mountPath: /conf
+  volumes:
+    - name: config-volume
+      configMap:
+        name: rw

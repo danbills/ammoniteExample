@@ -1,0 +1,2 @@
+deb https://packagecloud.io/varnishcache/varnish61/debian/ stretch main
+deb-src https://packagecloud.io/varnishcache/varnish61/debian/ stretch main

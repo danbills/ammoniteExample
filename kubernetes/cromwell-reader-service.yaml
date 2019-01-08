@@ -1,0 +1,11 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: cromwell-reader-service
+spec:
+  selector:
+    app: cromwell-reader
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
