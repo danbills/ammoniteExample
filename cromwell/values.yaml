@@ -12,6 +12,7 @@ mysql:
 google:
     executionBucket: debtest3
     project: broad-dsde-cromwell-dev
+    service_account_json: ""
 
 image:
   repository: broadinstitute/cromwell

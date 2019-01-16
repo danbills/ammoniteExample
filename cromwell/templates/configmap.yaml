@@ -3,9 +3,10 @@ kind: ConfigMap
 metadata:
   name: {{ template "cromwell.fullname" . }}-configuration
 data:
+  sa.json: |
+    {{ .Values.google.service_account_json }}
   cromwell.conf: |
     include required(classpath("application.conf"))
-
 
     database {
       profile = "slick.jdbc.MySQLProfile$"
@@ -32,17 +33,28 @@ data:
             concurrent-job-limit = 1000
 
             genomics {
-              auth = "application-default"
+              auth = "kube-service-account"
               endpoint-url = "https://genomics.googleapis.com/"
             }
 
             filesystems {
               gcs {
-                auth = "application-default"
+                auth = "kube-service-account"
                 project = "{{ .Values.google.project }}"
               }
             }
           }
         }
       }
+    }
+
+    google {
+        auths = [
+            {
+               name = "kube-service-account"
+               scheme = "service_account"
+               service-account-id = "db-helm@broad-dsde-cromwell-dev.iam.gserviceaccount.com"
+               pem-file = "/conf/sa.json"
+            }
+        ]
     }
