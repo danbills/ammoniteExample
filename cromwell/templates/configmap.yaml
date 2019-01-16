@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "cromwell.fullname" . }}-configuration
+data:
+  cromwell.conf: |
+    include required(classpath("application.conf"))
+
+
+    database {
+      profile = "slick.jdbc.MySQLProfile$"
+      db {
+        driver = "com.mysql.jdbc.Driver"
+        url = "jdbc:mysql://{{ .Release.Name }}-mysql:3306/cromwell?rewriteBatchedStatements=true&useSSL=false"
+        user = "cromwell"
+        password = "{{ .Values.mysql.mysqlUser }}"
+        connectionTimeout = 60000
+        queueSize = 8000
+      }
+    }
+
+    backend {
+      default = "Papi"
+      enabled = ["Papi"]
+      providers {
+        Papi {
+          actor-factory = "cromwell.backend.google.pipelines.v2alpha1.PipelinesApiLifecycleActorFactory"
+          config {
+            project = "{{ .Values.google.project }}"
+            root = "gs://{{ .Values.google.executionBucket }}/"
+            maximum-polling-interval = 600
+            concurrent-job-limit = 1000
+
+            genomics {
+              auth = "application-default"
+              endpoint-url = "https://genomics.googleapis.com/"
+            }
+
+            filesystems {
+              gcs {
+                auth = "application-default"
+                project = "{{ .Values.google.project }}"
+              }
+            }
+          }
+        }
+      }
+    }
