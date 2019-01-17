@@ -3,8 +3,8 @@ kind: ConfigMap
 metadata:
   name: {{ template "cromwell.fullname" . }}-configuration
 data:
-  sa.json: |
-    {{ .Values.google.service_account_json }}
+  sa.json: | 
+{{indent 8 .Values.google.service_account_json }}
   cromwell.conf: |
     include required(classpath("application.conf"))
 
@@ -19,7 +19,26 @@ data:
         queueSize = 8000
       }
     }
+    filesystems {
+        gcs {
+          # A reference to a potentially different auth for manipulating files via engine functions.
+          auth = "kube-service-account"
 
+          # Google project which will be billed for requests on buckets with requester pays enabled
+          project = "{{ .Values.google.project }}"
+
+          caching {
+            # When a cache hit is found, the following duplication strategy will be followed to use the cached outputs
+            # Possible values: "copy", "reference". Defaults to "copy"
+            # "copy": Copy the output files
+            # "reference": DO NOT copy the output files but point to the original output files instead.
+            #              Will still make sure than all the original output files exist and are accessible before
+            #              going forward with the cache hit.
+            duplication-strategy = "copy"
+          }
+
+        }
+    }
     backend {
       default = "Papi"
       enabled = ["Papi"]
@@ -53,8 +72,8 @@ data:
             {
                name = "kube-service-account"
                scheme = "service_account"
-               service-account-id = "db-helm@broad-dsde-cromwell-dev.iam.gserviceaccount.com"
-               pem-file = "/conf/sa.json"
+               service-account-id = {{ .Values.google.service_account_id }}
+               json-file = "/conf/sa.json"
             }
         ]
     }

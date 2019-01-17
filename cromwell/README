@@ -1,0 +1,17 @@
+Get service account with:
+	Compute instance admin
+
+ex: gcloud projects add-iam-policy-binding broad-dsde-cromwell-dev --member serviceAccount:db-helm-cli@broad-dsde-cromwell-dev.iam.gserviceaccount.com --role roles/compute.instanceAdmin
+
+	Storage object creator
+	Storage object viewer
+	Genomics pipeline runner
+	Genomics admin
+	Service account user
+
+copy it to "sa.json"
+
+#install helm
+curl https://raw.githubusercontent.com/helm/helm/master/scripts/get | bash
+
+run ./install_chart.sh

@@ -13,6 +13,7 @@ google:
     executionBucket: debtest3
     project: broad-dsde-cromwell-dev
     service_account_json: ""
+    service_account_id: "doesntmatter"
 
 image:
   repository: broadinstitute/cromwell
