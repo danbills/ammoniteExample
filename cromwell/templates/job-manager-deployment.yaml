@@ -1,11 +1,11 @@
-apiVersion: apps/v1 # Requires v1.9+ K8s node versions
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: job-manager-deployment
   labels:
     app: job-manager
 spec:
-  replicas: {{ env "REPLICAS" }} # For high-availability change set to 2-4
+  replicas: {{ .Values.jobManager.replicas }}
   revisionHistoryLimit: 1
   selector:
     matchLabels:
@@ -17,36 +17,36 @@ spec:
     spec:
       containers:
       - name: job-manager-api
-        image: {{ env "API_DOCKER_IMAGE" }}
+        image: {{ .Values.jobManager.apiImage }}
         imagePullPolicy: Always
-        args: ["-b", ":8190", "-t", "60", "-w", "{{ env "GUNICORN_WORKERS" }}", "-k", "{{ env "GUNICORN_WORKER_TYPE" }}"]
+        # from mint team
+        # args: ["-b", ":8190", "-t", "60", "-w", "{{ .Values.gunicornWorkers }}", "-k", "{{ .Values.gunicornWorkertype }}"]
+        args: ["-b", ":8190", "-t", "60"]
         ports:
         - containerPort: 8190
         volumeMounts:
-        {{ if not (env "USE_CAAS" | parseBool) }}
         - name: jm-api-config
           mountPath: /etc/job-manager/api
           readOnly: true
-        {{ end }}
         - name: jm-configmap-obj
           mountPath: /etc/job-manager/capabilities/capabilities-config.json
           subPath: capabilities-config
           readOnly: true
         env:
         - name: PATH_PREFIX
-          value: {{ env "API_PATH_PREFIX" }}
-        {{ if not (env "USE_CAAS" | parseBool) }}
+          value: "/api/v1"
+        - name: PYTHONDONTWRITEBYTECODE
+          value: 1
+        - name: USE_CAAS
+          value: False
         - name: CROMWELL_CREDENTIALS
           value: /etc/job-manager/api/config.json
-        {{ end }}
         - name: CROMWELL_URL
-          value: {{ env "CROMWELL_URL" }}
+          value: {{ .Release.Name }}-{{ template "cromwell.fullname" . }}
         - name: CAPABILITIES_CONFIG
           value: /etc/job-manager/capabilities/capabilities-config.json
-        - name: USE_CAAS
-          value: "{{ env "USE_CAAS" }}"
       - name: job-manager-ui
-        image: {{ env "UI_DOCKER_IMAGE" }}
+        image: {{ .Values.jobManager.uiImage }}
         imagePullPolicy: Always
         ports:
         - containerPort: 80
@@ -59,11 +59,6 @@ spec:
           mountPath: /ui/dist/assets/environments/environment.json
           subPath: jm-ui-config
           readOnly: true
-      {{ if env "USE_PROXY" | parseBool }}
-        - name: htpasswd
-          mountPath: /etc/apache2/
-          readOnly: true
-      {{ end }}
         readinessProbe:
           httpGet:
             path: /health
@@ -73,22 +68,12 @@ spec:
           timeoutSeconds: 10
       terminationGracePeriodSeconds: 0
       volumes:
-      {{ if not (env "USE_CAAS" | parseBool) }}
       - name: jm-api-config
         secret:
           secretName: {{ env "API_CONFIG"}}
           items:
           - key: config
             path: config.json
-      {{ end }}
-      {{ if env "USE_PROXY" | parseBool }}
-      - name: htpasswd
-        secret:
-          secretName: {{ env "PROXY_CREDENTIALS_CONFIG"}}
-          items:
-          - key: htpasswd
-            path: .htpasswd
-      {{ end }}
       - name: jm-configmap-obj
         configMap:
           name: {{ env "JMUI_CONFIGMAP_OBJ"}}
