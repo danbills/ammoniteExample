@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: job-manager-deployment
+  name: {{ include "cromwell.fullname" . }}-job-manager-deployment
   labels:
-    app: job-manager
+    app: {{ include "cromwell.name" . }}-job-manager-deployment
 spec:
   replicas: {{ .Values.jobManager.replicas }}
   revisionHistoryLimit: 1
@@ -16,21 +16,21 @@ spec:
         app: job-manager
     spec:
       containers:
-      - name: job-manager-api
+
+      - name: jm-api
         image: {{ .Values.jobManager.apiImage }}
         imagePullPolicy: Always
-        # from mint team
-        # args: ["-b", ":8190", "-t", "60", "-w", "{{ .Values.gunicornWorkers }}", "-k", "{{ .Values.gunicornWorkertype }}"]
-        args: ["-b", ":8190", "-t", "60"]
+        from mint team
+        args: ["-b", ":8190", "-t", "60", "-w", "{{ .Values.gunicornWorkers }}", "-k", "{{ .Values.gunicornWorkertype }}"]
+        # args: ["-b", ":8190", "-t", "60"] # Gunicorn arguments go into env variables
         ports:
         - containerPort: 8190
         volumeMounts:
-        - name: jm-api-config
+        - name: jm-api-configMap
           mountPath: /etc/job-manager/api
           readOnly: true
-        - name: jm-configmap-obj
+        - name: jm-api-configMap
           mountPath: /etc/job-manager/capabilities/capabilities-config.json
-          subPath: capabilities-config
           readOnly: true
         env:
         - name: PATH_PREFIX
@@ -45,19 +45,18 @@ spec:
           value: {{ .Release.Name }}-{{ template "cromwell.fullname" . }}
         - name: CAPABILITIES_CONFIG
           value: /etc/job-manager/capabilities/capabilities-config.json
+
       - name: job-manager-ui
         image: {{ .Values.jobManager.uiImage }}
         imagePullPolicy: Always
         ports:
         - containerPort: 80
         volumeMounts:
-        - name: jm-configmap-obj
-          mountPath: /etc/nginx/nginx.conf
-          subPath: jm-nginx-config
+        - name: jm-api-configMap
+          mountPath: /etc/nginx/
           readOnly: true
-        - name: jm-configmap-obj
-          mountPath: /ui/dist/assets/environments/environment.json
-          subPath: jm-ui-config
+        - name: jm-api-configMap
+          mountPath: /ui/dist/assets/environments/
           readOnly: true
         readinessProbe:
           httpGet:
@@ -68,12 +67,9 @@ spec:
           timeoutSeconds: 10
       terminationGracePeriodSeconds: 0
       volumes:
-      - name: jm-api-config
-        secret:
-          secretName: {{ env "API_CONFIG"}}
-          items:
-          - key: config
-            path: config.json
-      - name: jm-configmap-obj
+      - name: jm-api-configMap
         configMap:
-          name: {{ env "JMUI_CONFIGMAP_OBJ"}}
+          name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration
+      - name: jm-ui-configMap
+        configMap:
+          name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration

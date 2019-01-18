@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration
+data:
+    nginx.conf: |
+        # nginx server for static assets. For directive documentation, see
+        # http://nginx.org/en/docs/dirindex.html
+
+        # Required - just leave the defaults for now.
+        events {}
+
+        http {
+          include /etc/nginx/mime.types;
+          default_type application/octet-stream;
+
+          gzip on;
+          gzip_disable "msie6";
+
+          # upstream jm-api {
+          #  server jm-api:8190;
+          # }
+
+          server {
+            listen 80;
+
+            root /ui/dist;
+
+            location / {
+              try_files $uri$args $uri$args/ /index.html;
+            }
+
+            location /api {
+                # proxy_pass http://jm-api; # from docker-compose
+              proxy_pass http://127.0.0.1:8190;
+            }
+          }
+        }
+    environment.json: |
+        {
+            "apiUrl": "/api/v1",
+            "clientId": "{{ .Values.jobManager.clientId }}",
+            "dashboardEnabled": false
+        }

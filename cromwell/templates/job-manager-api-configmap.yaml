@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "cromwell.fullname" . }}-configuration
+  name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration
 data:
   api-config.json: |
     {
         "cromwell_user":"{{ .Values.jobManager.cromwellUser }}",
         "cromwell_password":"{{ .Values.jobManager.cromwellPass }}"
     }
-    capabilities-config-caas.json: |
+  capabilities-config.json: |
         {
           "displayFields": [
             {
@@ -91,10 +91,4 @@ data:
               "profile"
             ]
           }
-        }
-    ui-config.json: |
-        {
-            "apiUrl": "/api/v1",
-            "clientId": "{{ .Values.jobManager.clientId }}",
-            "dashboardEnabled": false
         }
