@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration
+  name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration
 data:
   api-config.json: |
     {

@@ -5,7 +5,7 @@ metadata:
 spec:
   type: LoadBalancer
   selector:
-    app: {{ include "cromwell.fullname" . }}-job-manager-deployment
+    app: job-manager-ui
   ports:
   - name: jm-ui
     protocol: TCP

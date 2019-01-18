@@ -17,10 +17,9 @@ spec:
     spec:
       containers:
 
-      - name: jm-api
+      - name: job-manager-api
         image: {{ .Values.jobManager.apiImage }}
         imagePullPolicy: Always
-        from mint team
         args: ["-b", ":8190", "-t", "60", "-w", "{{ .Values.gunicornWorkers }}", "-k", "{{ .Values.gunicornWorkertype }}"]
         # args: ["-b", ":8190", "-t", "60"] # Gunicorn arguments go into env variables
         ports:
