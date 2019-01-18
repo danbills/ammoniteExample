@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cromwell.fullname" . }}-job-manager-deployment
+  name: jm-other
   labels:
-    app: {{ include "cromwell.name" . }}-job-manager-deployment
+    app: {{ include "cromwell.name" . }}-jm-deployment
 spec:
   replicas: {{ .Values.jobManager.replicas }}
   revisionHistoryLimit: 1
@@ -25,19 +25,19 @@ spec:
         ports:
         - containerPort: 8190
         volumeMounts:
-        - name: jm-api-configMap
+        - name: jm-api-config-map
           mountPath: /etc/job-manager/api
           readOnly: true
-        - name: jm-api-configMap
+        - name: jm-api-config-map
           mountPath: /etc/job-manager/capabilities/capabilities-config.json
           readOnly: true
         env:
         - name: PATH_PREFIX
           value: "/api/v1"
         - name: PYTHONDONTWRITEBYTECODE
-          value: 1
+          value: "1"
         - name: USE_CAAS
-          value: False
+          value: "false"
         - name: CROMWELL_CREDENTIALS
           value: /etc/job-manager/api/config.json
         - name: CROMWELL_URL
@@ -51,10 +51,10 @@ spec:
         ports:
         - containerPort: 80
         volumeMounts:
-        - name: jm-api-configMap
+        - name: jm-api-config-map
           mountPath: /etc/nginx/
           readOnly: true
-        - name: jm-api-configMap
+        - name: jm-api-config-map
           mountPath: /ui/dist/assets/environments/
           readOnly: true
         readinessProbe:
@@ -66,9 +66,9 @@ spec:
           timeoutSeconds: 10
       terminationGracePeriodSeconds: 0
       volumes:
-      - name: jm-api-configMap
-        configMap:
+      - name: jm-api-config-map
+        config-map:
           name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration
-      - name: jm-ui-configMap
-        configMap:
+      - name: jm-ui-config-map
+        config-map:
           name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration

@@ -51,7 +51,7 @@ jobManager:
     clientId: ""
     cromwellUser: ""
     cromwellPass: ""
-    apiImage: "DataBiosphere/job-manager-api-cromwell"
-    uiImage: "DataBiosphere/job-manager-ui"
+    apiImage: "databiosphere/job-manager-api-cromwell"
+    uiImage: "databiosphere/job-manager-ui"
     gunicornWorkers: 3
     gunicornWorkerType: "gevent"
