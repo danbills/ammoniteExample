@@ -22,6 +22,7 @@ spec:
         imagePullPolicy: Always
         # args: ["-b", ":8190", "-t", "60", "-w", "{{ .Values.jobManager.gunicornWorkers }}", "-k", "{{ .Values.jobManager.gunicornWorkertype }}"]
         args: ["-b", ":8190", "-t", "60"]
+        #args: ["-b", ":80", "-t", "60"]
         # args: ["-b", ":8190", "-t", "60"] # Gunicorn arguments go into env variables
         ports:
         - containerPort: 8190
@@ -36,11 +37,11 @@ spec:
         - name: PYTHONDONTWRITEBYTECODE
           value: "1"
         - name: USE_CAAS
-          value: "false"
+          value: "true"
         - name: CROMWELL_CREDENTIALS
           value: /etc/job-manager/api/config.json
         - name: CROMWELL_URL
-          value: http://{{ .Release.Name }}-{{ template "cromwell.fullname" . }}
+          value: http://{{ template "cromwell.fullname" . }}
         - name: CAPABILITIES_CONFIG
           value: /etc/job-manager/capabilities/capabilities-config.json
 
@@ -50,12 +51,12 @@ spec:
         ports:
         - containerPort: 80
         volumeMounts:
-        - name: jm-ui-config-map
-          mountPath: /etc/nginx/nginx.conf
-          subPath: nginx.conf
-          readOnly: true
+            #- name: jm-ui-config-map3
+            #mountPath: /etc/nginx/
+            #readOnly: true
         - name: jm-ui-config-map2
           mountPath: /ui/dist/assets/environments/
+          #mountPath: /wrong
         readinessProbe:
           httpGet:
             path: /health
@@ -71,7 +72,7 @@ spec:
       - name: jm-api-config-map2
         config-map:
           name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration2
-      - name: jm-ui-config-map
+      - name: jm-ui-config-map3
         config-map:
           name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration
       - name: jm-ui-config-map2
