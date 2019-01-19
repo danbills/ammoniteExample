@@ -18,45 +18,44 @@ spec:
       containers:
 
       - name: job-manager-api
-        image: {{ .Values.jobManager.apiImage }}
+        image: {{ .Values.jobManager.apiImage }}:{{ .Values.jobManager.apiImageVersion }}
         imagePullPolicy: Always
-        args: ["-b", ":8190", "-t", "60", "-w", "{{ .Values.gunicornWorkers }}", "-k", "{{ .Values.gunicornWorkertype }}"]
+        # args: ["-b", ":8190", "-t", "60", "-w", "{{ .Values.jobManager.gunicornWorkers }}", "-k", "{{ .Values.jobManager.gunicornWorkertype }}"]
+        args: ["-b", ":8190", "-t", "60"]
         # args: ["-b", ":8190", "-t", "60"] # Gunicorn arguments go into env variables
         ports:
         - containerPort: 8190
         volumeMounts:
-        - name: jm-api-configMap
+        - name: jm-api-config-map
           mountPath: /etc/job-manager/api
-          readOnly: true
-        - name: jm-api-configMap
+        - name: jm-api-config-map2
           mountPath: /etc/job-manager/capabilities/capabilities-config.json
-          readOnly: true
         env:
         - name: PATH_PREFIX
           value: "/api/v1"
         - name: PYTHONDONTWRITEBYTECODE
-          value: 1
+          value: "1"
         - name: USE_CAAS
-          value: False
+          value: "false"
         - name: CROMWELL_CREDENTIALS
           value: /etc/job-manager/api/config.json
         - name: CROMWELL_URL
-          value: {{ .Release.Name }}-{{ template "cromwell.fullname" . }}
+          value: http://{{ .Release.Name }}-{{ template "cromwell.fullname" . }}
         - name: CAPABILITIES_CONFIG
           value: /etc/job-manager/capabilities/capabilities-config.json
 
       - name: job-manager-ui
-        image: {{ .Values.jobManager.uiImage }}
+        image: {{ .Values.jobManager.uiImage }}:{{ .Values.jobManager.uiImageVersion }}
         imagePullPolicy: Always
         ports:
         - containerPort: 80
         volumeMounts:
-        - name: jm-api-configMap
-          mountPath: /etc/nginx/
+        - name: jm-ui-config-map
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
           readOnly: true
-        - name: jm-api-configMap
+        - name: jm-ui-config-map2
           mountPath: /ui/dist/assets/environments/
-          readOnly: true
         readinessProbe:
           httpGet:
             path: /health
@@ -66,9 +65,15 @@ spec:
           timeoutSeconds: 10
       terminationGracePeriodSeconds: 0
       volumes:
-      - name: jm-api-configMap
-        configMap:
+      - name: jm-api-config-map
+        config-map:
           name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration
-      - name: jm-ui-configMap
-        configMap:
+      - name: jm-api-config-map2
+        config-map:
+          name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration2
+      - name: jm-ui-config-map
+        config-map:
           name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration
+      - name: jm-ui-config-map2
+        config-map:
+          name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration2
