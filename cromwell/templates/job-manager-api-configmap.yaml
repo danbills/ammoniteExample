@@ -84,7 +84,7 @@ data:
           ],
           "queryExtensions": [],
           "authentication": {
-            "isRequired": true,
+            "isRequired": false,
             "scopes": [
               "openid",
               "email",

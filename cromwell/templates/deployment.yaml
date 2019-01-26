@@ -29,6 +29,7 @@ spec:
               containerPort: 8000
               protocol: TCP
           livenessProbe:
+            initialDelaySeconds: 80
             httpGet:
               path: /
               port: http

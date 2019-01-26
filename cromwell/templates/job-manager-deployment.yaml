@@ -30,7 +30,7 @@ spec:
         - name: jm-api-config-map
           mountPath: /etc/job-manager/api
         - name: jm-api-config-map2
-          mountPath: /etc/job-manager/capabilities/capabilities-config.json
+          mountPath: /etc/job-manager/capabilities/
         env:
         - name: PATH_PREFIX
           value: "/api/v1"
@@ -41,10 +41,16 @@ spec:
         - name: CROMWELL_CREDENTIALS
           value: /etc/job-manager/api/config.json
         - name: CROMWELL_URL
-          value: http://{{ template "cromwell.fullname" . }}
+          value: http://{{ template "cromwell.fullname" . }}/api/workflows/v1
         - name: CAPABILITIES_CONFIG
           value: /etc/job-manager/capabilities/capabilities-config.json
-
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8190
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          timeoutSeconds: 10
       - name: job-manager-ui
         image: {{ .Values.jobManager.uiImage }}:{{ .Values.jobManager.uiImageVersion }}
         imagePullPolicy: Always
@@ -56,7 +62,7 @@ spec:
           readOnly: true
         - name: jm-ui-config-map
           mountPath: /ui/dist/assets/environments/
-        readinessProbe:
+        livenessProbe:
           httpGet:
             path: /health
             port: 80
@@ -68,6 +74,9 @@ spec:
       - name: jm-api-config-map
         configMap:
           name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration
+      - name: jm-api-config-map2
+        configMap:
+          name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration2
       - name: jm-ui-config-map
         configMap:
           name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration

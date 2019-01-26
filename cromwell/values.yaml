@@ -48,13 +48,13 @@ affinity: {}
 
 jobManager:
     replicas: 1
-    clientId: ""
+    clientId: "foo-bar.apps.googleusercontent.com"
     cromwellUser: ""
     cromwellPass: ""
-    apiImage: "databiosphere/job-manager-api-cromwell"
-    apiImageVersion: v0.5.2
-    uiImage: "databiosphere/job-manager-ui"
-    uiImageVersion: v0.5.2
+    apiImage: "us.gcr.io/broad-dsde-cromwell-dev/job-manager-cromwell"
+    apiImageVersion: v0.5.3
+    uiImage: "us.gcr.io/broad-dsde-cromwell-dev/job-manager-ui"
+    uiImageVersion: v0.5.3
     gunicornWorkers: 3
     gunicornWorkerType: "gevent"
     useCaas: "false"
