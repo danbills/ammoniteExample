@@ -37,7 +37,7 @@ spec:
         - name: PYTHONDONTWRITEBYTECODE
           value: "1"
         - name: USE_CAAS
-          value: "true"
+          value: "{{ .Values.jobManager.useCaas }}"
         - name: CROMWELL_CREDENTIALS
           value: /etc/job-manager/api/config.json
         - name: CROMWELL_URL
@@ -67,14 +67,14 @@ spec:
       terminationGracePeriodSeconds: 0
       volumes:
       - name: jm-api-config-map
-        config-map:
+        configMap:
           name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration
       - name: jm-api-config-map2
-        config-map:
+        configMap:
           name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration2
       - name: jm-ui-config-map3
-        config-map:
+        configMap:
           name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration
       - name: jm-ui-config-map2
-        config-map:
+        configMap:
           name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration2

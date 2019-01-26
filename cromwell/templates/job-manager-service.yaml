@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: {{ include "cromwell.fullname" . }}-job-manager-service
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: job-manager
   ports:

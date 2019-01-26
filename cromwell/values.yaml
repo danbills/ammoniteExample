@@ -24,8 +24,8 @@ nameOverride: ""
 fullnameOverride: ""
 
 service:
-    #type: ClusterIP
-  type: LoadBalancer
+  type: ClusterIP
+    #type: LoadBalancer
   port: 80
 
 resources: {}
@@ -57,3 +57,4 @@ jobManager:
     uiImageVersion: v0.5.2
     gunicornWorkers: 3
     gunicornWorkerType: "gevent"
+    useCaas: "false"

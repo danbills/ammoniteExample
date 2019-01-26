@@ -30,6 +30,7 @@ import $ivy.`org.tpolecat::doobie-hikari:0.5.3`
 import $ivy.`com.google.cloud:google-cloud-datastore:1.35.0`
 import $ivy.`mysql:mysql-connector-java:8.0.11`
 import $ivy.`com.chuusai::shapeless:2.3.3`
+import $ivy.`org.hsqldb:hsqldb:2.4.1`
 
 import shapeless.syntax.std.tuple._
 
@@ -80,19 +81,34 @@ def queryLatest[F[_]](implicit eff : Effect[F], m: Monad[Stream[F, ?]]): Pipe[F,
 
 def emitList[F[_]: Effect, A]: Pipe[F, Seq[A], A] = _.flatMap(Stream.emits(_))
 
+def pullEveryMinute = {
+  def fullLatestFromDatastore: Stream[IO, Long] =
+    datastore[IO].through(queryLatest).through(emitList).map(_.getLong("autoId"))
 
-def fullLatestFromDatastore: Stream[IO, Long] =
- datastore[IO].through(queryLatest).through(emitList).map(_.getLong("autoId"))
+  val timer =
+    Scheduler.
+    fromScheduledExecutorService(Executors.newScheduledThreadPool(1)).
+    awakeEvery[IO](5.seconds)
 
-val timer = Scheduler.fromScheduledExecutorService(Executors.newScheduledThreadPool(1)).awakeEvery[IO](5.seconds)
+    def onlyEmitIfNew: Pipe[IO, Int, Option[Int]] =
+      scanState(0)({
+        n =>
+          State{old =>
+            if (old == n)
+              (n, None)
+            else
+              (n, Some(old))
+          }})
 
-fullLatestFromDatastore.zipWith(timer){ case (ds, _) => ds }
+  fullLatestFromDatastore.zipWith(timer){ case (ds, _) => ds }
+}
 
 type MetadataColumns = (Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])
 
 def find(offset: Int): doobie.Query0[MetadataColumns] =
   sql"select * from METADATA_ENTRY order by METADATA_JOURNAL_ID limit 500 offset $offset".
       query[(Int, String, String, Option[String], Option[Int], Option[Int], Option[String], Instant, Option[String])]
+
 
 case class DoobieConfig(driver: String, connectionString: String, user: String, pass: String)
 
@@ -108,16 +124,6 @@ def server(args: String*) = {
   val datastore = DatastoreOptions.getDefaultInstance().getService();
 
   val tcpServer: fs2.Stream[IO, DoobieConfig] = simple_rpc_server.server[DoobieConfig](args.head)
-
-  /*
-fullLatestFromDatastore.pull.uncons.flatMap{
-  case Some((head, tail)) =>
-    //head is a seqment
-  case None => Pull.done
-}
-*/
-
-  tcpServer merge fullLatestFromDatastore
 
   tcpServer.
     flatMap{
@@ -165,3 +171,16 @@ fullLatestFromDatastore.pull.uncons.flatMap{
           }).mapResult(_._2)
       }.stream
 
+  /*
+    driver = "org.hsqldb.jdbcDriver"
+    url = "jdbc:hsqldb:file:metadata;shutdown=false;hsqldb.tx=mvcc"
+    connectionTimeout = 20000
+    */
+def allWorkflows: doobie.Query0[String] =
+  sql"select WORKFLOW_EXECUTION_UUID from WORKFLOW_STORE_ENTRY".
+      query[String]
+
+val xa = Transactor.fromDriverManager[IO]("org.hsqldb.jdbcDriver", "jdbc:hsqldb:file:metadata", "ChooseAName","YourOtherPassword")
+
+        val finder = allWorkflows.stream
+        xa.transP.apply(finder).evalMap(res => IO(println(res))).compile.drain.unsafeRunSync
