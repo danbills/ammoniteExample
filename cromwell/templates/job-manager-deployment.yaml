@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cromwell.fullname" . }}-job-manager-deployment
+  name: jm-other
   labels:
-    app: {{ include "cromwell.name" . }}-job-manager-deployment
+    app: {{ include "cromwell.name" . }}-jm-deployment
 spec:
   replicas: {{ .Values.jobManager.replicas }}
   revisionHistoryLimit: 1
@@ -51,12 +51,11 @@ spec:
         ports:
         - containerPort: 80
         volumeMounts:
-            #- name: jm-ui-config-map3
-            #mountPath: /etc/nginx/
-            #readOnly: true
-        - name: jm-ui-config-map2
+        - name: jm-ui-config-map
+          mountPath: /etc/nginx/
+          readOnly: true
+        - name: jm-ui-config-map
           mountPath: /ui/dist/assets/environments/
-          #mountPath: /wrong
         readinessProbe:
           httpGet:
             path: /health
@@ -69,12 +68,6 @@ spec:
       - name: jm-api-config-map
         configMap:
           name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration
-      - name: jm-api-config-map2
-        configMap:
-          name: {{ template "cromwell.fullname" . }}-job-manager-api-configuration2
-      - name: jm-ui-config-map3
+      - name: jm-ui-config-map
         configMap:
           name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration
-      - name: jm-ui-config-map2
-        configMap:
-          name: {{ template "cromwell.fullname" . }}-job-manager-ui-configuration2
