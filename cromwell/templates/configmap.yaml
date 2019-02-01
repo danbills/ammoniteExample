@@ -3,7 +3,38 @@ kind: ConfigMap
 metadata:
   name: {{ template "cromwell.fullname" . }}-configuration
 data:
-  sa.json: | 
+
+  fluentd.conf: |
+      <source>
+          @type tail
+          path /shared/cromwell_metadata.log
+          pos_file /cromwell.pos
+          limit_recently_modified 24h
+          tag cromwell
+          <parse>
+              @type none
+          </parse>
+      </source>
+      <match **>
+          @type gcs
+
+          project broad-dsde-cromwell-dev
+          keyfile /etc/fluentd/sa.json
+          bucket debtest3
+          object_key_format %{path}%{time_slice}_%{index}.%{file_extension}
+          path logs/${tag}/%Y/%m/%d/
+
+          # if you want to use ${tag} or %Y/%m/%d/ like syntax in path / object_key_format,
+          # need to specify tag for ${tag} and time for %Y/%m/%d in <buffer> argument.
+          <buffer tag,time>
+            @type file
+            path /var/log/fluent/gcs
+            timekey 60 # 1 hour partition
+            timekey_wait 1m
+            timekey_use_utc true # use utc
+          </buffer>
+      </match>
+  sa.json: |
 {{indent 8 .Values.google.service_account_json }}
   cromwell.conf: |
     include required(classpath("application.conf"))

@@ -20,6 +20,14 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       containers:
+        - name: {{ .Chart.Name }}-fluentd
+          image: us.gcr.io/broad-dsde-cromwell-dev/fluentd-pubsub
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared
+            - name: config-volume
+              mountPath: /etc/fluentd
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           args: ["server"]
@@ -29,12 +37,12 @@ spec:
               containerPort: 8000
               protocol: TCP
           livenessProbe:
-            initialDelaySeconds: 80
+            initialDelaySeconds: 30
             httpGet:
               path: /
               port: http
           readinessProbe:
-            initialDelaySeconds: 30
+            initialDelaySeconds: 80
             httpGet:
               path: /
               port: http
@@ -42,10 +50,18 @@ spec:
           env:
               - name: JAVA_OPTS
                 value: "-Dconfig.file=/conf/cromwell.conf"
+              - name: METADATA_LOG_MODE
+                value: "FILEROLLER"
+              - name: METADATA_FILEROLLER_DIR
+                value: "/shared"
           volumeMounts:
             - name: config-volume
               mountPath: /conf
+            - name: shared-data
+              mountPath: /shared
       volumes:
+        - name: shared-data
+          emptyDir: {}
         - name: config-volume
           configMap:
             name: {{ template "cromwell.fullname" . }}-configuration

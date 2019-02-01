@@ -16,8 +16,8 @@ google:
     service_account_id: "doesntmatter"
 
 image:
-  repository: broadinstitute/cromwell
-  tag: 36
+  repository: gcr.io/broad-dsde-cromwell-dev/cromwell-pubsub
+  tag: 37
   pullPolicy: IfNotPresent
 
 nameOverride: ""
