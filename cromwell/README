@@ -15,3 +15,18 @@ copy it to "sa.json"
 curl https://raw.githubusercontent.com/helm/helm/master/scripts/get | bash
 
 run ./install_chart.sh
+
+
+# todo
+separate summarizer in new deployment
+  needs setting for disabling the running of workflows
+  
+  script gcs repo and open bucket to public access
+  
+  setting to omit job manager
+  
+  replica count setting for workers
+  
+  compare to pharma5 k8s deployment
+ 
+ 
