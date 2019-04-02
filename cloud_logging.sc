@@ -5,7 +5,7 @@ import scala.collection.JavaConverters._
 import com.google.cloud.logging.LogEntry;
 import com.google.cloud.logging.Logging;
 import com.google.cloud.logging.LoggingOptions;
-import com.google.cloud.logging.Payload.StringPayload;
+import com.google.cloud.logging.Payload.JsonPayload;
 import com.google.cloud.logging.Severity;
 import java.util.Collections;
 
@@ -19,7 +19,7 @@ val logName = "my-log";
 // The data to write to the log
 val text = "Hello, world!";
 
-val entry = LogEntry.newBuilder(StringPayload.of(text))
+val entry = LogEntry.newBuilder(JsonPayload.of(Map("entry" -> text).asJava))
     .setSeverity(Severity.ERROR)
     .setLogName(logName)
     //.setResource(MonitoredResource.newBuilder("global").build())
