@@ -1,4 +1,12 @@
-import $ivy.`io.kubernetes:client-java:4.0.0`
+interp.configureCompiler(_.settings.YpartialUnification.value = true)
+
+import $ivy.`io.kubernetes:client-java:5.0.0`
+import io.kubernetes.client.proto.V1Apps
+import $ivy.`org.typelevel::cats-effect:1.3.1`
+import cats.implicits._
+import cats.instances._
+import io.kubernetes.client.ApiCallback
+
 
 /*
 Copyright 2018 The Kubernetes Authors.
@@ -12,9 +20,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+import io.kubernetes.client.custom.Quantity
+import io.kubernetes.client.models.{V1ConfigMapBuilder, V1Deployment, V1DeploymentBuilder, V1PersistentVolumeClaimBuilder, V1Service, V1ServiceBuilder}
 import collection.JavaConverters._
+import cats.data.IndexedReaderWriterStateT
+import cats.data.Chain
+import cats.effect.IO
 
 import io.kubernetes.client.ApiClient;
+import io.kubernetes.client.apis.AppsV1Api
 import io.kubernetes.client.ApiException;
 import io.kubernetes.client.Configuration;
 import io.kubernetes.client.apis.CoreV1Api;
@@ -36,81 +50,289 @@ import java.util.Arrays;
  *
  * <p>From inside $REPO_DIR/examples
  */
- def run = {
-    val client = Config.defaultClient();
-    Configuration.setDefaultApiClient(client);
+val service: V1Service =
+  new V1ServiceBuilder().
+    withNewMetadata().withName("cromwell-service").endMetadata().
+    withNewSpec().addNewPort().withPort(8000).endPort().addToSelector("app", "cromwell").endSpec().
+    build()
 
-    val api = new CoreV1Api();
-    /*
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: cromwell
-spec:
-  selector:
-    matchLabels:
-      app: cromwell
-  strategy:
-    type: Recreate
-  template:
-    metadata:
-      labels:
-        app: cromwell
-    spec:
-      containers:
-      - image: broadinstitute/cromwell
-        name: cromwell
-        env:
-          # Use secret in real usage
-        - name: MYSQL_ROOT_PASSWORD
-          value: password
-        ports:
-        - containerPort: 8000
-          name: cromwell
-	  */
-
-    val deployment = 
-	    new V1DeploymentBuilder().
-            withNewMetadata().
-		    withName("cromwell").
-            endMetadata().
-	    withNewSpec.
-		    withReplicas(3).
-		    withNewTemplate.
-		      withNewSpec().
-		         
-		      endSpec().
-		    endTemplate.
-	    endSpec.
+val worker: V1Deployment =
+  new V1DeploymentBuilder().
+    withNewMetadata().withNewName("cromwell").endMetadata().
+    withNewSpec.
+    withReplicas(1).
+    withNewSelector().addToMatchLabels("app", "cromwell").endSelector().
+    withNewTemplate.
+    withNewMetadata().addToLabels("app", "cromwell").endMetadata().
+    withNewSpec().
+    addNewVolume().withName("config-volume").withNewConfigMap.withName("cromwell-conf").endConfigMap().endVolume().
+    addNewContainer().
+    withImage("broadinstitute/cromwell:44").
+    withName("cromwell").
+    addNewEnv().withName("CROMWELL_ARGS").withValue("server").endEnv().
+    addNewEnv().withName("JAVA_OPTS").withValue("-Dconfig.file=/conf/cromwell.conf").endEnv().
+    addNewVolumeMount().withMountPath("/conf").withName("config-volume").endVolumeMount().
+    endContainer().
+    endSpec().
+    endTemplate.
+    endSpec.
+    build()
 
 
-    val pod =
-        new V1PodBuilder()
-            .withNewMetadata()
-            .withName("apod")
-            .endMetadata()
-            .withNewSpec()
-            .addNewContainer()
-            .withName("www")
-            .withImage("nginx")
-            .endContainer()
-            .endSpec()
-            .build();
+val mysqlDeployment: V1Deployment =
+  new V1DeploymentBuilder().
+    withNewMetadata().withNewName("mysql").
+    endMetadata().
+    withNewSpec.
+    withReplicas(1).
+    withNewSelector().addToMatchLabels("app", "mysql").endSelector().
 
-    api.createNamespacedPod("default", pod, null, null, null);
+    withNewTemplate.
+    withNewMetadata().addToLabels("app", "mysql").endMetadata().
+    withNewSpec().
+    addNewContainer().
+    withImage("mysql:5.5").
+    withName("mysql").
+    addNewEnv().withName("MYSQL_ROOT_PASSWORD").withValue("cromwell").endEnv().
+    addNewEnv().withName("MYSQL_USER").withValue("cromwell").endEnv().
+    addNewEnv().withName("MYSQL_PASSWORD").withValue("cromwell").endEnv().
+    addNewEnv().withName("MYSQL_DATABASE").withValue("cromwell").endEnv().
+    addNewPort().withContainerPort(3306).endPort().
+    addNewVolumeMount().withMountPath("/var/lib/mysql").withName("mysql-persistent-storage").endVolumeMount().
+    endContainer().
+    addNewVolume().withName("mysql-persistent-storage").withNewPersistentVolumeClaim().withClaimName("mysql-pv-claim2").endPersistentVolumeClaim().endVolume().
+    endSpec().
+    endTemplate.
+    endSpec.
+    build()
 
-    val pod2 =
-        new V1Pod()
-            .metadata(new V1ObjectMeta().name("anotherpod"))
-            .spec(
-                new V1PodSpec()
-                    .containers(Arrays.asList(new V1Container().name("www").image("nginx"))));
+val mysqlService = new V1ServiceBuilder().
+  withNewMetadata().withName("mysql-service").endMetadata().
+  withNewSpec().addNewPort().withPort(3306).endPort().addToSelector("app", "mysql").endSpec().
+  build()
 
-    api.createNamespacedPod("default", pod2, null, null, null);
+val pvc = new V1PersistentVolumeClaimBuilder().withNewMetadata().withName("mysql-pv-claim2").endMetadata().
+  withNewSpec().withAccessModes("ReadWriteOnce").withNewResources().addToRequests("storage", new Quantity("20Gi")).endResources().endSpec().build()
 
-    val list =
-        api.listNamespacedPod("default", null, null, null, null, null, null, null, null, null);
-    for (item <- list.getItems().asScala) {
-      println(item.getMetadata().getName());
-    }
+val cfg = new V1ConfigMapBuilder().
+  withNewMetadata().withName("cromwell-conf").endMetadata().
+  withData(Map("cromwell.conf" -> conf).asJava).build()
+
+def conf =
+  """
+    |database {
+    |  profile = "slick.jdbc.MySQLProfile$"
+    |  db {
+    |    driver = "com.mysql.cj.jdbc.Driver"
+    |    url = "jdbc:mysql://mysql/cromwell?rewriteBatchedStatements=true&useSSL=false"
+    |    user = "cromwell"
+    |    password = "cromwell"
+    |    connectionTimeout = 5000
+    |  }
+    |}
+    |
+    """.stripMargin
+
+
+def papiConf =
+  """
+    |database {
+    |  profile = "slick.jdbc.MySQLProfile$"
+    |  db {
+    |    driver = "com.mysql.cj.jdbc.Driver"
+    |    url = "jdbc:mysql://mysql/cromwell?rewriteBatchedStatements=true&useSSL=false"
+    |    user = "cromwell"
+    |    # this is not a secret and is hardcoded.
+    |    password = "cromwell"
+    |    connectionTimeout = 5000
+    |  }
+    |}
+    |
+    """.stripMargin
+val serviceAccountFile: String = "/home/dan/.kube/config"
+
+import io.kubernetes.client.util.ClientBuilder
+import io.kubernetes.client.util.KubeConfig
+import java.io.FileReader
+val client = ClientBuilder.kubeconfig(KubeConfig.loadKubeConfig(new FileReader(serviceAccountFile))).build
+client.setDebugging(true)
+Configuration.setDefaultApiClient(client);
+
+val api = new CoreV1Api();
+val apps = new AppsV1Api();
+
+val envVar = (new V1EnvVar)
+envVar.setName("CROMWELL_ARGS")
+envVar.setValue("server")
+
+import io.kubernetes.client.custom.Quantity
+import io.kubernetes.client.models.{V1ConfigMapBuilder, V1Deployment, V1DeploymentBuilder, V1PersistentVolumeClaimBuilder, V1Service, V1ServiceBuilder}
+import collection.JavaConverters._
+
+object CromwellComponents {
+
+  val service: V1Service =
+    new V1ServiceBuilder().
+      withNewMetadata().withName("cromwell-service").endMetadata().
+      withNewSpec().addNewPort().withPort(8000).endPort().addToSelector("app", "cromwell").endSpec().
+      build()
+
+  val worker: V1Deployment =
+    new V1DeploymentBuilder().
+      withNewMetadata().withNewName("cromwell").endMetadata().
+      withNewSpec.
+      withReplicas(1).
+      withNewSelector().addToMatchLabels("app", "cromwell").endSelector().
+      withNewTemplate.
+      withNewMetadata().addToLabels("app", "cromwell").endMetadata().
+      withNewSpec().
+      addNewVolume().withName("config-volume").withNewConfigMap.withName("cromwell-conf").endConfigMap().endVolume().
+      addNewContainer().
+      withImage("broadinstitute/cromwell:44").
+      withName("cromwell").
+      addNewEnv().withName("CROMWELL_ARGS").withValue("server").endEnv().
+      addNewEnv().withName("JAVA_OPTS").withValue("-Dconfig.file=/conf/cromwell.conf").endEnv().
+      addNewVolumeMount().withMountPath("/conf").withName("config-volume").endVolumeMount().
+      endContainer().
+      endSpec().
+      endTemplate.
+      endSpec.
+      build()
+
+
+  val mysqlDeployment: V1Deployment =
+    new V1DeploymentBuilder().
+      withNewMetadata().withNewName("mysql").
+      endMetadata().
+      withNewSpec.
+      withReplicas(1).
+      withNewSelector().addToMatchLabels("app", "mysql").endSelector().
+
+      withNewTemplate.
+      withNewMetadata().addToLabels("app", "mysql").endMetadata().
+      withNewSpec().
+      addNewContainer().
+      withImage("mysql:5.5").
+      withName("mysql").
+      addNewEnv().withName("MYSQL_ROOT_PASSWORD").withValue("cromwell").endEnv().
+      addNewEnv().withName("MYSQL_USER").withValue("cromwell").endEnv().
+      addNewEnv().withName("MYSQL_PASSWORD").withValue("cromwell").endEnv().
+      addNewEnv().withName("MYSQL_DATABASE").withValue("cromwell").endEnv().
+      addNewPort().withContainerPort(3306).endPort().
+      addNewVolumeMount().withMountPath("/var/lib/mysql").withName("mysql-persistent-storage").endVolumeMount().
+      endContainer().
+      addNewVolume().withName("mysql-persistent-storage").withNewPersistentVolumeClaim().withClaimName("mysql-pv-claim2").endPersistentVolumeClaim().endVolume().
+      endSpec().
+      endTemplate.
+      endSpec.
+      build()
+
+  val mysqlService = new V1ServiceBuilder().
+    withNewMetadata().withName("mysql-service").endMetadata().
+    withNewSpec().addNewPort().withPort(3306).endPort().addToSelector("app", "mysql").endSpec().
+    build()
+
+  val pvc = new V1PersistentVolumeClaimBuilder().withNewMetadata().withName("mysql-pv-claim2").endMetadata().
+    withNewSpec().withAccessModes("ReadWriteOnce").withNewResources().addToRequests("storage", new Quantity("20Gi")).endResources().endSpec().build()
+
+  val cfg = new V1ConfigMapBuilder().
+    withNewMetadata().withName("cromwell-conf").endMetadata().
+    withData(Map("cromwell.conf" -> conf).asJava).build()
+
+  def conf =
+    """
+      |database {
+      |  profile = "slick.jdbc.MySQLProfile$"
+      |  db {
+      |    driver = "com.mysql.cj.jdbc.Driver"
+      |    url = "jdbc:mysql://mysql/cromwell?rewriteBatchedStatements=true&useSSL=false"
+      |    user = "cromwell"
+      |    password = "cromwell"
+      |    connectionTimeout = 5000
+      |  }
+      |}
+      |
+    """.stripMargin
+
+
+  def papiConf =
+    """
+      |database {
+      |  profile = "slick.jdbc.MySQLProfile$"
+      |  db {
+      |    driver = "com.mysql.cj.jdbc.Driver"
+      |    url = "jdbc:mysql://mysql/cromwell?rewriteBatchedStatements=true&useSSL=false"
+      |    user = "cromwell"
+      |    password = "cromwell"
+      |    connectionTimeout = 5000
+      |  }
+      |}
+      |
+    """.stripMargin
 }
+
+import CromwellComponents._
+
+/***** MySQL ****/
+
+// Service
+//api.createNamespacedService("default", mysqlService, null, null, null)
+
+
+/***** Cromwell ****/
+// ConfigMap
+//api.createNamespacedConfigMap("default", cfg, null, null, null)
+
+// Deployment
+//apps.createNamespacedDeployment("default", worker, null, null, null)
+
+// Service
+//api.createNamespacedService("default", service, null, null, null)
+
+object Init
+object VolumeClaimed
+object MysqlDeployment
+object ServiceCreated
+object CromwellConfigMap
+object CromwellDeployment
+object CromwellService
+
+import java.util
+
+case class Config(namespace: String = "default")
+
+def persistentVolumeClaim: IndexedReaderWriterStateT[IO, Config, Chain[String], Init.type,  VolumeClaimed.type, V1PersistentVolumeClaim] = IndexedReaderWriterStateT.apply {
+  (env, sa) => {
+    // Persistent Volume Claim for MySQL persistence
+    IO.async[V1PersistentVolumeClaim]{reporter =>
+      val apiCallback = new ApiCallback[V1PersistentVolumeClaim] {
+        override def onFailure(e: ApiException, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit = reporter(Left(e))
+        override def onSuccess(result: V1PersistentVolumeClaim, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit = reporter(Right(result))
+        override def onUploadProgress(bytesWritten: Long, contentLength: Long, done: Boolean): Unit = ()
+        override def onDownloadProgress(bytesRead: Long, contentLength: Long, done: Boolean): Unit = ()
+      }
+      api.createNamespacedPersistentVolumeClaimAsync(env.namespace, pvc, null, null, null, apiCallback)
+    }.map(claim => (Chain(s"created persistent volume claim $claim"), VolumeClaimed, claim))
+  }
+}
+
+def  cromwellDeployment: IndexedReaderWriterStateT[IO, Config, Chain[String], VolumeClaimed.type, MysqlDeployment.type, Unit] = IndexedReaderWriterStateT.apply {
+  (env, sa) => IO{
+
+    // Deployment
+    apps.createNamespacedDeployment(env.namespace, mysqlDeployment, null, null, null)
+
+    (Chain(s"deployed mysql $mysqlDeployment"), MysqlDeployment, ())
+  }
+}
+import cats.syntax.apply._
+import cats.syntax.functor._
+import cats.instances.tuple._
+for {
+  claim <- persistentVolumeClaim
+  deployment <- cromwellDeployment
+} yield ()
+
+type Step2[A]  = IndexedReaderWriterStateT[IO, Config, Chain[String], MysqlDeployment.type, ServiceCreated.type, A]
+
+
