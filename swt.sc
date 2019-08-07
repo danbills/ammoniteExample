@@ -10,11 +10,11 @@ import $ivy.`org.fusesource:sigar:1.6.4`
 import grizzled.sys._
 import grizzled.sys.OperatingSystem._
 
+
 import ammonite.ops.{Path => APath, _}
 //import $ivy.`org.eclipse.platform:org.eclipse.jface:3.12.2`
 //load jface, which painfully includes a dependency on swt magic sauce jar
-interp.load.ivy(coursier.Dependency(module = coursier.Module("org.eclipse.platform", "org.eclipse.jface", Map.empty), version = "3.12.2", exclusions = Set(("org.eclipse.platform", "org.eclipse.swt.${osgi.platform}"))))
-
+interp.load.ivy(coursier.Dependency(module = coursier.Module(coursier.Organization("org.eclipse.platform"), coursier.ModuleName("org.eclipse.jface"), Map.empty), version = "3.12.2", exclusions = Set(("org.eclipse.platform", "org.eclipse.swt.${osgi.platform}"))))
 
 os match {
   case Mac => interp.load.ivy("org.eclipse.swt" % "org.eclipse.swt.cocoa.macosx.x86_64" % "4.6.1")
