@@ -25,6 +25,8 @@ import io.kubernetes.client.models.{V1ConfigMapBuilder, V1Deployment, V1Deployme
 import collection.JavaConverters._
 import cats.data.IndexedReaderWriterStateT
 import cats.data.Chain
+import cats.data.ReaderT
+import cats.data.Reader
 import cats.effect.IO
 
 import io.kubernetes.client.ApiClient;
@@ -149,17 +151,19 @@ def papiConf =
     |}
     |
     """.stripMargin
-val serviceAccountFile: String = "/home/dan/.kube/config"
+//val serviceAccountFile: String = "/home/dan/.kube/config"
+val serviceAccountFile: String = "/home/BROAD.MIT.EDU/danb/.kube/config"
 
-import io.kubernetes.client.util.ClientBuilder
-import io.kubernetes.client.util.KubeConfig
-import java.io.FileReader
-val client = ClientBuilder.kubeconfig(KubeConfig.loadKubeConfig(new FileReader(serviceAccountFile))).build
-client.setDebugging(true)
-Configuration.setDefaultApiClient(client);
+val kubeThings: IO[(CoreV1Api, AppsV1Api)] = IO {
+  import io.kubernetes.client.util.ClientBuilder
+  import io.kubernetes.client.util.KubeConfig
+  import java.io.FileReader
+  val client = ClientBuilder.kubeconfig(KubeConfig.loadKubeConfig(new FileReader(serviceAccountFile))).build
+  client.setDebugging(true)
+  Configuration.setDefaultApiClient(client);
 
-val api = new CoreV1Api();
-val apps = new AppsV1Api();
+  (new CoreV1Api(), new AppsV1Api())
+}
 
 val envVar = (new V1EnvVar)
 envVar.setName("CROMWELL_ARGS")
@@ -299,40 +303,57 @@ object CromwellService
 
 import java.util
 
-case class Config(namespace: String = "default")
+case class Config(namespace: String = "default", coreApi: CoreV1Api, appsV1Api: AppsV1Api)
 
-def persistentVolumeClaim: IndexedReaderWriterStateT[IO, Config, Chain[String], Init.type,  VolumeClaimed.type, V1PersistentVolumeClaim] = IndexedReaderWriterStateT.apply {
+import cats.data.OptionT
+import cats.syntax.either._
+
+
+def cromwellDeploymentExists: cats.data.ReaderT[IO, Config, V1DeploymentList] = ReaderT[IO,Config,V1DeploymentList] { config =>
+    IO.async{reporter => config.
+      appsV1Api.
+      listNamespacedDeploymentAsync("default", null,null,null, null, null, null, null, null,null, callback(reporter))}
+}
+
+def persistentVolumeClaim(deleteExisting: Boolean): IndexedReaderWriterStateT[IO, Config, Chain[String], Init.type,  VolumeClaimed.type, V1PersistentVolumeClaim] = IndexedReaderWriterStateT.apply {
   (env, sa) => {
     // Persistent Volume Claim for MySQL persistence
     IO.async[V1PersistentVolumeClaim]{reporter =>
-      val apiCallback = new ApiCallback[V1PersistentVolumeClaim] {
-        override def onFailure(e: ApiException, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit = reporter(Left(e))
-        override def onSuccess(result: V1PersistentVolumeClaim, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit = reporter(Right(result))
-        override def onUploadProgress(bytesWritten: Long, contentLength: Long, done: Boolean): Unit = ()
-        override def onDownloadProgress(bytesRead: Long, contentLength: Long, done: Boolean): Unit = ()
-      }
-      api.createNamespacedPersistentVolumeClaimAsync(env.namespace, pvc, null, null, null, apiCallback)
+      env.coreApi.createNamespacedPersistentVolumeClaimAsync(env.namespace, pvc, null, null, null, callback(reporter))
     }.map(claim => (Chain(s"created persistent volume claim $claim"), VolumeClaimed, claim))
   }
 }
 
-def  cromwellDeployment: IndexedReaderWriterStateT[IO, Config, Chain[String], VolumeClaimed.type, MysqlDeployment.type, Unit] = IndexedReaderWriterStateT.apply {
-  (env, sa) => IO{
+def cromwellDeployment: IndexedReaderWriterStateT[IO, Config, Chain[String], VolumeClaimed.type, MysqlDeployment.type, V1Deployment] = IndexedReaderWriterStateT.apply {
+  (env, sa) => {
+    IO.async[V1Deployment] { reporter =>
+      // Deployment
+      env.appsV1Api.createNamespacedDeploymentAsync(env.namespace, mysqlDeployment, null, null, null, callback(reporter))
+    }.map(mysqlDeployment => (Chain(s"deployed mysql $mysqlDeployment"), MysqlDeployment, mysqlDeployment))
+  }
+}
 
-    // Deployment
-    apps.createNamespacedDeployment(env.namespace, mysqlDeployment, null, null, null)
-
-    (Chain(s"deployed mysql $mysqlDeployment"), MysqlDeployment, ())
+def callback[A](reporter: (Either[Exception, A]) => Unit): ApiCallback[A] = {
+  new ApiCallback[A] {
+    override def onFailure(e: ApiException, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit = reporter(Left(e))
+    override def onSuccess(result: A, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit = reporter(Right(result))
+    override def onUploadProgress(bytesWritten: Long, contentLength: Long, done: Boolean): Unit = ()
+    override def onDownloadProgress(bytesRead: Long, contentLength: Long, done: Boolean): Unit = ()
   }
 }
 import cats.syntax.apply._
 import cats.syntax.functor._
 import cats.instances.tuple._
+
+//script assumes none of these things exist.  If they do, should either write a new script or comment these out
 for {
-  claim <- persistentVolumeClaim
+  claim <- persistentVolumeClaim(false)
   deployment <- cromwellDeployment
 } yield ()
 
-type Step2[A]  = IndexedReaderWriterStateT[IO, Config, Chain[String], MysqlDeployment.type, ServiceCreated.type, A]
+val x: IO[Config] = kubeThings.map{ case (api, apps) => Config(coreApi = api, appsV1Api = apps) }
 
+x.flatMap{
+    cromwellDeploymentExists.run
+}.map(option => println(s"\n\n\nthing was $option")).unsafeRunSync()
 
