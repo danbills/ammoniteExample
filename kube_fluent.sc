@@ -3,6 +3,8 @@ interp.configureCompiler(_.settings.YpartialUnification.value = true)
 import $ivy.`io.kubernetes:client-java:5.0.0`
 import io.kubernetes.client.proto.V1Apps
 import $ivy.`org.typelevel::cats-effect:1.3.1`
+import $ivy.`com.google.auth:google-auth-library-oauth2-http:0.13.0`
+
 import cats.implicits._
 import cats.instances._
 import io.kubernetes.client.ApiCallback
@@ -52,7 +54,21 @@ import java.util.Arrays;
  *
  * <p>From inside $REPO_DIR/examples
  */
-val service: V1Service =
+
+import com.google.auth.oauth2.AccessToken
+import com.google.auth.oauth2.GoogleCredentials
+import io.kubernetes.client.util.KubeConfig
+import io.kubernetes.client.util.authenticators.Authenticator
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import java.io.IOException
+import java.time.Instant
+import java.util.Date
+import java.util
+import io.kubernetes.client.util.authenticators.GCPAuthenticator
+
+
+val service =
   new V1ServiceBuilder().
     withNewMetadata().withName("cromwell-service").endMetadata().
     withNewSpec().addNewPort().withPort(8000).endPort().addToSelector("app", "cromwell").endSpec().
@@ -88,7 +104,6 @@ val mysqlDeployment: V1Deployment =
     withNewSpec.
     withReplicas(1).
     withNewSelector().addToMatchLabels("app", "mysql").endSelector().
-
     withNewTemplate.
     withNewMetadata().addToLabels("app", "mysql").endMetadata().
     withNewSpec().
@@ -310,9 +325,7 @@ import cats.syntax.either._
 
 
 def cromwellDeploymentExists: cats.data.ReaderT[IO, Config, V1DeploymentList] = ReaderT[IO,Config,V1DeploymentList] { config =>
-    IO.async{reporter => config.
-      appsV1Api.
-      listNamespacedDeploymentAsync("default", null,null,null, null, null, null, null, null,null, callback(reporter))}
+     IO (config. appsV1Api. listNamespacedDeployment("default", null,null,null, null, null, null, null, null,null))
 }
 
 def persistentVolumeClaim(deleteExisting: Boolean): IndexedReaderWriterStateT[IO, Config, Chain[String], Init.type,  VolumeClaimed.type, V1PersistentVolumeClaim] = IndexedReaderWriterStateT.apply {
@@ -345,7 +358,6 @@ import cats.syntax.apply._
 import cats.syntax.functor._
 import cats.instances.tuple._
 
-//script assumes none of these things exist.  If they do, should either write a new script or comment these out
 for {
   claim <- persistentVolumeClaim(false)
   deployment <- cromwellDeployment
